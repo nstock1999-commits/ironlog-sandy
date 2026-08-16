@@ -1,8 +1,8 @@
 {
-  "name": "ironlog-functions",
+  "name": "ironlog",
   "version": "1.0.0",
   "private": true,
-  "description": "Netlify Functions for IRONLOG cloud backup",
+  "description": "IRONLOG — DAPRE training log",
   "dependencies": {
     "@netlify/blobs": "^10.7.13"
   }
