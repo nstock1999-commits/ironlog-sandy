@@ -860,10 +860,16 @@
 
   var syncTimer = null;
 
-  function save(){
-    // Local write always happens first and is never gated on the network.
+  function persistLocal(){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     catch(e){}
+  }
+
+  function save(){
+    // Stamped so another device can tell whose copy is newer.
+    state.updatedAt = new Date().toISOString();
+    // Local write always happens first and is never gated on the network.
+    persistLocal();
     scheduleCloudBackup();
   }
 
@@ -1849,32 +1855,44 @@
     return n;
   }
 
-  // If this browser has no work but the cloud does, the local copy was lost --
-  // a cleared cache, a new device, a reinstalled app. Pull it back rather than
-  // leaving the lifter staring at an empty program.
-  function restoreFromCloudIfEmpty(){
+  // Pull the cloud copy whenever it is newer than this device's. That covers a
+  // cleared browser or a new phone, and -- because both apps write to the same
+  // per-person record -- sets logged on your behalf from the other app.
+  var pullInFlight = false;
+
+  function syncFromCloud(onDone){
     try{
-      if(typeof fetch !== "function") return;
-      if(countWork(state) > 0) return;
+      if(typeof fetch !== "function" || pullInFlight) return;
+      pullInFlight = true;
 
       fetch(SYNC_URL, { cache: "no-store" })
         .then(function(res){ return res.ok ? res.json() : null; })
         .then(function(body){
-          if(!body) return;
-          var incoming = body.state || null;
-          if(!incoming || countWork(incoming) === 0) return;
-          if(countWork(state) > 0) return;   // something got logged while we waited
+          var incoming = body && body.state ? body.state : null;
+          if(!incoming) return;
 
-          var restored = normalizeState(incoming);
-          if(!restored) return;
-          state = restored;
-          save();
+          var remoteWork = countWork(incoming);
+          if(remoteWork === 0) return;              // nothing worth adopting
+
+          var remoteAt = incoming.updatedAt || body.updatedAt || null;
+          var localAt = state.updatedAt || null;
+          var adopt = countWork(state) === 0 ||     // this device has nothing
+                      !localAt ||                    // never stamped locally
+                      (remoteAt && remoteAt > localAt);
+          if(!adopt) return;
+
+          var next = normalizeState(incoming);
+          if(!next) return;
+
+          state = next;
+          persistLocal();          // adopt as-is; restamping would bounce it back
           renderTabs();
           render();
-          toast("Restored " + countWork(state) + " entries from cloud backup");
+          if(onDone) onDone(remoteWork);
         })
-        .catch(function(){});
-    }catch(e){}
+        .catch(function(){})
+        .then(function(){ pullInFlight = false; });
+    }catch(e){ pullInFlight = false; }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1937,7 +1955,9 @@
   }
 
   document.addEventListener("visibilitychange", function(){
-    if(!document.hidden) checkRollover();
+    if(document.hidden) return;
+    checkRollover();
+    syncFromCloud(function(n){ toast("Synced " + n + " entries from your other device"); });
   });
 
   // Roll yesterday's work into history before the first paint, and persist a
@@ -1948,7 +1968,7 @@
   wireReminders();
   renderTabs();
   render();
-  restoreFromCloudIfEmpty();
+  syncFromCloud();
 })();
 </script>
 

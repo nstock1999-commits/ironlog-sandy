@@ -177,6 +177,26 @@ exports.handler = async function (event) {
       }
     }
 
+    // Optimistic concurrency. A writer that read the record first sends the
+    // stamp it saw; if the stored copy has moved on since, this write would
+    // silently erase whatever changed, so refuse it and let the caller reload.
+    // Writes without a baseUpdatedAt (a person's own device) are unconditional.
+    if (payload.baseUpdatedAt) {
+      let storedAt = null;
+      try {
+        const current = await store.get(person, { type: "json" });
+        storedAt = current && current.updatedAt ? current.updatedAt : null;
+      } catch (err) { /* unreadable: treat as no conflict */ }
+
+      if (storedAt && storedAt !== payload.baseUpdatedAt) {
+        return json(409, {
+          error: "This log changed since you loaded it.",
+          storedUpdatedAt: storedAt,
+          yourBase: payload.baseUpdatedAt
+        });
+      }
+    }
+
     const record = {
       person: person,
       updatedAt: new Date().toISOString(),
