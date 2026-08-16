@@ -933,6 +933,9 @@
       }
       ex.sets = [];
       ex._justPR = false;
+      // Clear the marker too, so the new session lays its sets out again
+      // rather than opening empty.
+      ex.prefilledOn = null;
     });
 
     state.lastActiveDate = today;
@@ -949,7 +952,8 @@
     if(ex.prefilledOn === today) return false;
     if(ex.sets.length > 0){ ex.prefilledOn = today; return false; }
 
-    var weight = suggestedWeight(ex);
+    // One weight for the whole session, taken from the last real session.
+    var weight = startingWeight(ex);
     for(var i = 0; i < want; i++) ex.sets.push({ weight: weight, reps: null });
     ex.prefilledOn = today;
     return true;
@@ -984,7 +988,18 @@
     return dapre(s.weight, s.reps);
   }
 
-  // Every weight suggestion in the app funnels through here.
+  // The weight this session is being worked at. Adding a set mid-workout must
+  // reuse it, never re-run DAPRE -- doing that walked the load up 5 lb after
+  // every logged set (90 -> 95 -> 100) and corrupted the session.
+  function sessionWeight(ex){
+    for(var i = ex.sets.length - 1; i >= 0; i--){
+      if(ex.sets[i] && typeof ex.sets[i].weight === "number") return ex.sets[i].weight;
+    }
+    return startingWeight(ex);   // nothing logged yet: open at the projection
+  }
+
+  // Projection for the NEXT session, from the last set logged in this one.
+  // Never used to fill a set in the current session.
   function suggestedWeight(ex){
     var last = lastLoggedSet(ex);
     if(last) return dapre(last.weight, last.reps);
@@ -1199,7 +1214,7 @@
 
     if(next !== null && last){
       predictRow.innerHTML =
-        '<div><div class="predict-label">DAPRE Next Weight</div>' +
+        '<div><div class="predict-label">Next Session</div>' +
         '<div class="predict-note">From ' + last.weight + ' lb × ' + last.reps + ' reps this session' +
           (dapreHeldByCap(last.weight, last.reps) ? ' — holding, ' + EARN_STEP_REPS + '+ reps earns +5 lb' : '') +
         '</div></div>' +
@@ -1221,7 +1236,8 @@
       actions.className = "exercise-actions";
       var addSetBtn = document.createElement("button");
       addSetBtn.className = "btn-ghost";
-      addSetBtn.textContent = next !== null ? "Add Set (" + next + " lb)" : "Add Set";
+      var addAt = sessionWeight(ex);
+      addSetBtn.textContent = addAt !== null ? "Add Set (" + addAt + " lb)" : "Add Set";
       addSetBtn.setAttribute("data-action", "add-set");
       addSetBtn.setAttribute("data-id", ex.id);
       actions.appendChild(addSetBtn);
@@ -1268,10 +1284,10 @@
     if(isReadOnly()) return;
     var ex = findExercise(id);
     if(!ex) return;
-    var predictedWeight = suggestedWeight(ex);
+    var weight = sessionWeight(ex);
     var prevBest = bestE1RM(ex.sets);
 
-    ex.sets.push({ weight: predictedWeight !== null ? predictedWeight : null, reps: null });
+    ex.sets.push({ weight: weight !== null ? weight : null, reps: null });
 
     var newBest = bestE1RM(ex.sets);
     ex._justPR = newBest > prevBest && prevBest > 0;
