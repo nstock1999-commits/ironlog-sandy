@@ -508,49 +508,43 @@
   var MAX_HISTORY = 24;
 
   var SEED_DAYS = [
-    { dayName: "Monday", label: "Mon", focus: "Upper", exercises: [
-      { name: "Barbell Bench Press", target: "DAPRE — 4 sets", primary: true },
-      { name: "Machine Row", target: "4 x 8-12" },
-      { name: "Incline DB Bench Press", target: "3 x 10-15" },
-      { name: "Lat Pull Downs", target: "3 x 10-12" },
-      { name: "DB Lateral Raise", target: "4 x 12-20" },
-      { name: "EZ Bar Preacher Curls", target: "3 x 10-15" }
+    { dayName: "Monday", label: "Mon", focus: "Legs", exercises: [
+      { name: "Smith Machine Squat", target: "4 \u00d7 8-10", sets: 4 },
+      { name: "Hip Thrust", target: "4 \u00d7 10-12", sets: 4 },
+      { name: "Leg Press", target: "4 \u00d7 12-15", sets: 4 },
+      { name: "Leg Curl", target: "3 \u00d7 12-15", sets: 3 },
+      { name: "Calf Raise", target: "3 \u00d7 15-20", sets: 3 }
     ]},
-    { dayName: "Tuesday", label: "Tue", focus: "Lower", exercises: [
-      { name: "Squat", target: "DAPRE — 4 sets", primary: true },
-      { name: "Stiff Leg Deadlift", target: "4 x 8-12" },
-      { name: "Seated Leg Curl", target: "3 x 10-15" },
-      { name: "Leg Extension", target: "3 x 12-15" },
-      { name: "Standing Calf Raise", target: "4 x 10-15" }
+    { dayName: "Tuesday", label: "Tue", focus: "Chest & Calves", exercises: [
+      { name: "Smith Machine Bench Press", target: "3 \u00d7 10-12", sets: 3 },
+      { name: "Incline Dumbbell Press", target: "3 \u00d7 10-12", sets: 3 },
+      { name: "Cable Fly / Pec Deck", target: "2 \u00d7 12-15", sets: 2 },
+      { name: "Dips", target: "2 \u00d7 10-12", sets: 2 },
+      { name: "Calf Raise", target: "3 \u00d7 15-20", sets: 3 }
     ]},
-    { dayName: "Wednesday", label: "Wed", focus: "Push", exercises: [
-      { name: "Seated Barbell Press", target: "DAPRE — 4 sets", primary: true },
-      { name: "Incline DB Flys", target: "3 x 10-15" },
-      { name: "Pec Dec", target: "3 x 10-15" },
-      { name: "Cable Lateral Raise", target: "4 x 12-20" },
-      { name: "EZ Bar Skullcrushers", target: "3 x 10-15" },
-      { name: "Cable Tricep Extensions", target: "3 x 12-15" }
+    { dayName: "Wednesday", label: "Wed", focus: "Shoulders", exercises: [
+      { name: "Smith Machine OHP", target: "3 \u00d7 10-12", sets: 3 },
+      { name: "Lateral Raise", target: "3 \u00d7 12-15", sets: 3 },
+      { name: "Rear Delt Fly", target: "2 \u00d7 12-15", sets: 2 },
+      { name: "Front Raise", target: "2 \u00d7 12-15", sets: 2 }
     ]},
-    { dayName: "Thursday", label: "Thu", focus: "Pull", exercises: [
-      { name: "Reverse Grip Lat Pull Downs", target: "DAPRE — 4 sets", primary: true },
-      { name: "Seated Cable Row", target: "4 x 8-12" },
-      { name: "Cable Reverse Fly", target: "3 x 12-20" },
-      { name: "Barbell Shrug", target: "3 x 10-15" },
-      { name: "Incline DB Curl", target: "3 x 10-15" },
-      { name: "Standing Hammer Curl", target: "3 x 12-15" }
+    { dayName: "Thursday", label: "Thu", focus: "Back & Glutes", exercises: [
+      { name: "Lat Pulldown", target: "3 \u00d7 10-12", sets: 3 },
+      { name: "Seated Cable Row", target: "3 \u00d7 10-12", sets: 3 },
+      { name: "Romanian Deadlift", target: "4 \u00d7 10-12", sets: 4 },
+      { name: "Cable Pull-Through", target: "3 \u00d7 12-15", sets: 3 }
     ]},
-    { dayName: "Friday", label: "Fri", focus: "Legs", exercises: [
-      { name: "Leg Press", target: "DAPRE — 4 sets", primary: true },
-      { name: "Bulgarian Split Squat", target: "3 x 10-12" },
-      { name: "Lying Leg Curl", target: "3 x 10-15" },
-      { name: "Walking Lunge", target: "3 x 10-12" },
-      { name: "Seated Calf Raise", target: "4 x 12-20" }
+    { dayName: "Friday", label: "Fri", focus: "Arms & Glutes", exercises: [
+      { name: "Barbell/EZ-Bar Curl", target: "2 \u00d7 10-12", sets: 2 },
+      { name: "Close-Grip Bench Press", target: "2 \u00d7 10-12", sets: 2 },
+      { name: "Bulgarian Split Squat", target: "4 \u00d7 10-12/leg", sets: 4 },
+      { name: "Abductor Machine", target: "3 \u00d7 15-20", sets: 3 }
     ]}
   ];
 
   // Bumped whenever the seeded program changes, so an existing log is
   // reconciled onto the new plan instead of being left on the old one.
-  var PROGRAM_VERSION = 2;
+  var PROGRAM_VERSION = 3;
 
   /* ------------------------------------------------------------------ */
   /* dates                                                              */
@@ -662,6 +656,7 @@
     if(!ex) return ex;
     if(!Array.isArray(ex.sets)) ex.sets = [];
     if(!Array.isArray(ex.history)) ex.history = [];
+    if(typeof ex.targetSets !== "number") ex.targetSets = 0;
     return ex;
   }
 
@@ -709,7 +704,7 @@
           name: ex.name,
           dayName: group.dayName,
           target: ex.target,
-          primary: !!ex.primary,
+          targetSets: ex.sets || 0,
           sets: [],
           history: []
         });
@@ -740,28 +735,30 @@
   function reconcileProgram(data){
     if(data.programVersion === PROGRAM_VERSION) return false;
 
+    // Buckets, not single slots: Calf Raise appears on both Monday and Tuesday,
+    // so one normalized name can legitimately map to more than one exercise.
     var byName = {};
     data.exercises.forEach(function(ex){
       var k = normalizeName(ex.name);
-      if(!byName[k]) byName[k] = ex;
+      (byName[k] = byName[k] || []).push(ex);
     });
 
     var next = [];
     SEED_DAYS.forEach(function(day){
       day.exercises.forEach(function(seed){
         var k = normalizeName(seed.name);
-        var existing = byName[k];
+        var bucket = byName[k];
+        var existing = (bucket && bucket.length) ? bucket.shift() : null;
         if(existing){
           existing.name = seed.name;
           existing.dayName = day.dayName;
           existing.target = seed.target;
-          existing.primary = !!seed.primary;
+          existing.targetSets = seed.sets || 0;
           next.push(existing);
-          delete byName[k];
         } else {
           next.push({
             id: uid(), name: seed.name, dayName: day.dayName,
-            target: seed.target, primary: !!seed.primary,
+            target: seed.target, targetSets: seed.sets || 0,
             sets: [], history: []
           });
         }
@@ -771,9 +768,10 @@
     // Lifts the new program dropped, plus anything added by hand: keep them if
     // they hold real work, on whichever day they already lived.
     Object.keys(byName).forEach(function(k){
-      var ex = byName[k];
-      var hasWork = (ex.sets && ex.sets.length) || (ex.history && ex.history.length);
-      if(hasWork){ ex.primary = false; next.push(ex); }
+      byName[k].forEach(function(ex){
+        var hasWork = (ex.sets && ex.sets.length) || (ex.history && ex.history.length);
+        if(hasWork){ ex.targetSets = 0; next.push(ex); }
+      });
     });
 
     data.exercises = next;
@@ -882,6 +880,22 @@
     });
 
     state.lastActiveDate = today;
+    return true;
+  }
+
+  // Open a day and the sets are already laid out at the projected weight, so the
+  // only thing left to type is reps. Runs at most once per exercise per day, so
+  // deleting a set does not make it reappear.
+  function prefillSets(ex){
+    var want = ex.targetSets || 0;
+    if(want <= 0) return false;
+    var today = todayKey();
+    if(ex.prefilledOn === today) return false;
+    if(ex.sets.length > 0){ ex.prefilledOn = today; return false; }
+
+    var weight = suggestedWeight(ex);
+    for(var i = 0; i < want; i++) ex.sets.push({ weight: weight, reps: null });
+    ex.prefilledOn = today;
     return true;
   }
 
@@ -1060,6 +1074,12 @@
       }
       listEl.appendChild(empty);
       return;
+    }
+
+    if(!readOnly){
+      var filled = false;
+      dayExercises.forEach(function(ex){ if(prefillSets(ex)) filled = true; });
+      if(filled) save();
     }
 
     dayExercises.forEach(function(ex){
