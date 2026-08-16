@@ -583,6 +583,10 @@
     syncTimer = null;
     try{
       if(typeof fetch !== "function") return;
+      // An empty log is never worth uploading, and uploading one over a good
+      // backup is how a cleared browser becomes permanent data loss. The
+      // function refuses these too; this avoids the pointless round trip.
+      if(countWork(state) === 0) return;
       var body = JSON.stringify({
         person: PERSON,
         updatedAt: new Date().toISOString(),
@@ -979,6 +983,54 @@
     renderExercises();
   }
 
+  function toast(msg){
+    var el = document.getElementById("toast");
+    if(!el) return;
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(function(){ el.classList.remove("show"); }, 1600);
+  }
+  // Work worth protecting: a logged set, an archived session, or (Nick only) a
+  // nutrition entry. A freshly seeded program counts as empty.
+  function countWork(st){
+    if(!st || typeof st !== "object") return 0;
+    var n = 0;
+    (st.exercises || []).forEach(function(ex){
+      (ex.sets || []).forEach(function(s){ if(isLoggedSet(s)) n++; });
+      (ex.history || []).forEach(function(h){ n += (h && h.sets) ? h.sets.length : 0; });
+    });
+    if(st.nutrition && st.nutrition.entries) n += st.nutrition.entries.length;
+    return n;
+  }
+
+  // If this browser has no work but the cloud does, the local copy was lost --
+  // a cleared cache, a new device, a reinstalled app. Pull it back rather than
+  // leaving the lifter staring at an empty program.
+  function restoreFromCloudIfEmpty(){
+    try{
+      if(typeof fetch !== "function") return;
+      if(countWork(state) > 0) return;
+
+      fetch(SYNC_URL, { cache: "no-store" })
+        .then(function(res){ return res.ok ? res.json() : null; })
+        .then(function(body){
+          if(!body) return;
+          var incoming = body.state || null;
+          if(!incoming || countWork(incoming) === 0) return;
+          if(countWork(state) > 0) return;   // something got logged while we waited
+
+          var restored = normalizeState(incoming);
+          if(!restored) return;
+          state = restored;
+          save();
+          renderTabs();
+          render();
+          toast("Restored " + countWork(state) + " entries from cloud backup");
+        })
+        .catch(function(){});
+    }catch(e){}
+  }
+
   /* ------------------------------------------------------------------ */
   /* wiring                                                              */
   /* ------------------------------------------------------------------ */
@@ -1048,6 +1100,7 @@
 
   renderTabs();
   render();
+  restoreFromCloudIfEmpty();
 })();
 </script>
 
