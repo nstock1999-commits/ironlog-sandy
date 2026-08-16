@@ -18,7 +18,7 @@
  * stored value, so one app can manage a kind the other never touches.
  */
 
-const { getStore } = require("@netlify/blobs");
+const { getStore, connectLambda } = require("@netlify/blobs");
 
 const STORE_NAME = "ironlog";
 const PEOPLE = ["nick", "sandy"];
@@ -35,6 +35,29 @@ const JSON_HEADERS = Object.assign({
   "Content-Type": "application/json",
   "Cache-Control": "no-store"
 }, CORS_HEADERS);
+
+// v1 `exports.handler` functions do not get the Netlify Blobs context for free.
+// HTTP-invoked ones can recover it from the event, which carries the blobs
+// payload and site headers. Guarded because the event has no such data when
+// running locally or under test.
+function connectBlobs(event) {
+  try {
+    connectLambda(event);
+  } catch (err) { /* no blobs payload on this event; fall through */ }
+}
+
+// Explicit credentials as a fallback, so a runtime that withholds the automatic
+// context can be fixed with env vars instead of a code change.
+function openStore(name) {
+  try {
+    return getStore(name);
+  } catch (err) {
+    const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
+    const token = process.env.NETLIFY_API_TOKEN || process.env.NETLIFY_AUTH_TOKEN;
+    if (siteID && token) return getStore({ name, siteID, token });
+    throw err;
+  }
+}
 
 function json(statusCode, body) {
   return { statusCode: statusCode, headers: JSON_HEADERS, body: JSON.stringify(body) };
@@ -130,6 +153,7 @@ function validSubscription(sub) {
 }
 
 exports.handler = async function (event) {
+  connectBlobs(event);
   const method = event.httpMethod;
 
   if (method === "OPTIONS") {
@@ -145,7 +169,7 @@ exports.handler = async function (event) {
 
   let store;
   try {
-    store = getStore(STORE_NAME);
+    store = openStore(STORE_NAME);
   } catch (err) {
     return json(500, { error: "Blob store unavailable" });
   }

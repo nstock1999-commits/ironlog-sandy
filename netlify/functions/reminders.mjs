@@ -1,21 +1,24 @@
-"use strict";
-
 /**
  * Scheduled reminders: meals (3x daily) and body composition scans.
+ *
+ * This is a v2 function on purpose. A v1 `exports.handler` never receives the
+ * Netlify Blobs context automatically -- HTTP-invoked v1 functions can recover
+ * it with connectLambda(event), but that reads event.blobs and request headers,
+ * neither of which exist on a scheduled invocation. v2 functions get the
+ * context injected directly. It is still an ordinary Node function; nothing
+ * here is Deno or Edge.
  *
  * Netlify's scheduler runs on a fixed UTC cron, but reminders are set in local
  * wall-clock time. So this runs every 15 minutes and asks, per person: what
  * time is it where they are, and is anything due that hasn't gone out today?
  *
- * Requires on the site:
- *   VAPID_PUBLIC_KEY   (must match PUSH_PUBLIC_KEY in index.html)
- *   VAPID_PRIVATE_KEY
- * Optional VAPID_SUBJECT. Without the keys this no-ops loudly in the logs
- * rather than throwing on every scheduled run.
+ * Requires VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the site. Optional
+ * VAPID_SUBJECT. Without the keys it no-ops loudly rather than throwing on
+ * every run.
  */
 
-const { getStore } = require("@netlify/blobs");
-const webpush = require("web-push");
+import { getStore } from "@netlify/blobs";
+import webpush from "web-push";
 
 const STORE_NAME = "ironlog";
 const PEOPLE = ["nick", "sandy"];
@@ -25,7 +28,7 @@ const PEOPLE = ["nick", "sandy"];
 // together in the afternoon.
 const GRACE_MINUTES = 120;
 
-// A scan reminder is worth delivering late in the day it's due, but not days
+// A scan reminder is worth delivering late on the day it's due, but not days
 // later — by then the date has moved on.
 const SCAN_GRACE_MINUTES = 720;
 
@@ -35,12 +38,12 @@ const MEAL_MESSAGES = [
   { title: "Dinner",    body: "Last big meal. Hit your numbers." }
 ];
 
-function mealMessage(index) {
+export function mealMessage(index) {
   const m = MEAL_MESSAGES[index] || { title: "Meal reminder", body: "Time to eat." };
   return { title: "IRONLOG — " + m.title, body: m.body, tag: "meal-" + index, url: "/" };
 }
 
-function scanMessage() {
+export function scanMessage() {
   return {
     title: "IRONLOG — InBody Scan",
     body: "Body comp scan today. Go fasted, before training, same as last time.",
@@ -49,7 +52,24 @@ function scanMessage() {
   };
 }
 
-function localNow(timezone) {
+// Automatic context is the normal path. The explicit fallback exists so that if
+// a runtime ever withholds it again, adding NETLIFY_SITE_ID + NETLIFY_API_TOKEN
+// fixes it without a code change.
+export function openStore(name) {
+  try {
+    return getStore(name);
+  } catch (err) {
+    const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
+    const token = process.env.NETLIFY_API_TOKEN || process.env.NETLIFY_AUTH_TOKEN;
+    if (siteID && token) {
+      console.log("[reminders] automatic Blobs context missing; using explicit credentials");
+      return getStore({ name, siteID, token });
+    }
+    throw err;
+  }
+}
+
+export function localNow(timezone) {
   const now = new Date();
   let parts;
   try {
@@ -70,19 +90,19 @@ function localNow(timezone) {
   };
 }
 
-function toMinutes(hhmm) {
+export function toMinutes(hhmm) {
   const m = /^(\d{2}):(\d{2})$/.exec(String(hhmm || ""));
   if (!m) return null;
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-function addDays(dateStr, days) {
+export function addDays(dateStr, days) {
   const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
-function dueMealSlots(meals, now) {
+export function dueMealSlots(meals, now) {
   const due = [];
   const skip = [];
   const times = (meals && meals.times) || [];
@@ -103,7 +123,7 @@ function dueMealSlots(meals, now) {
 // A scan is due once the calendar has reached nextDate and the local clock has
 // passed the chosen time. Whether it fires or is skipped, nextDate always rolls
 // forward past today so a missed cycle can't queue up behind the next one.
-function scanDecision(scan, now) {
+export function scanDecision(scan, now) {
   if (!scan || !scan.enabled || !scan.nextDate) return { fire: false, advance: false };
   if (scan.lastSent === now.date) return { fire: false, advance: false };
   if (now.date < scan.nextDate) return { fire: false, advance: false };
@@ -117,7 +137,7 @@ function scanDecision(scan, now) {
   return { fire: withinWindow, advance: true };
 }
 
-function nextScanDate(scan, todayStr) {
+export function nextScanDate(scan, todayStr) {
   const interval = Math.max(7, Number(scan.intervalDays) || 35);
   let next = scan.nextDate;
   let guard = 0;
@@ -129,7 +149,7 @@ function configured() {
   return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 }
 
-function migrate(record) {
+export function migrate(record) {
   if (!record) return null;
   if (!record.meals && Array.isArray(record.times)) {
     record.meals = { enabled: !!record.enabled, times: record.times, lastSent: record.lastSent || {} };
@@ -139,10 +159,10 @@ function migrate(record) {
   return record;
 }
 
-exports.handler = async function () {
+export default async function handler() {
   if (!configured()) {
     console.log("[reminders] VAPID keys not set — skipping. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.");
-    return { statusCode: 200, body: "not configured" };
+    return new Response("not configured", { status: 200 });
   }
 
   webpush.setVapidDetails(
@@ -153,10 +173,10 @@ exports.handler = async function () {
 
   let store;
   try {
-    store = getStore(STORE_NAME);
+    store = openStore(STORE_NAME);
   } catch (err) {
     console.log("[reminders] blob store unavailable:", err && err.message);
-    return { statusCode: 500, body: "store unavailable" };
+    return new Response("store unavailable", { status: 500 });
   }
 
   const summary = [];
@@ -244,10 +264,12 @@ exports.handler = async function () {
   }
 
   console.log("[reminders]", summary.length ? summary.join("; ") : "nothing due");
-  return { statusCode: 200, body: JSON.stringify({ ok: true, actions: summary }) };
-};
+  return new Response(JSON.stringify({ ok: true, actions: summary }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" }
+  });
+}
 
-exports._internal = {
-  localNow, toMinutes, addDays, dueMealSlots, scanDecision, nextScanDate,
-  mealMessage, scanMessage, GRACE_MINUTES, SCAN_GRACE_MINUTES
-};
+export const config = { schedule: "*/15 * * * *" };
+
+export const GRACE = { GRACE_MINUTES, SCAN_GRACE_MINUTES };

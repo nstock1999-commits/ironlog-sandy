@@ -5,10 +5,9 @@
 [functions]
   directory = "netlify/functions"
 
-# Meal reminders. Netlify's cron is UTC, so this runs every 15 minutes and the
-# function decides what is due in each person's own timezone.
-[functions."reminders"]
-  schedule = "*/15 * * * *"
+# reminders.mjs is a v2 function and declares its own schedule inline, so no
+# [functions."reminders"] block here. v1 handlers never receive the Netlify
+# Blobs context on a scheduled run; v2 does.
 
 # API routes must come BEFORE the SPA catch-all below, or /* swallows them.
 [[redirects]]
