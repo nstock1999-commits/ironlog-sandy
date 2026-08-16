@@ -200,6 +200,30 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+  .partner-toggle{
+    background:transparent; color:var(--chalk-dim); border:1px solid var(--steel);
+    border-radius:999px; padding:7px 14px; font-size:0.78rem;
+    text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;
+    transition:color .15s, border-color .15s, background .15s;
+  }
+  .partner-toggle:active{ transform:scale(0.97); }
+  .partner-toggle.is-active{ color:#fff; border-color:var(--accent); background:var(--blue-dim); }
+
+  .partner-banner{
+    margin:0 0 16px; padding:10px 12px;
+    background:var(--surface-2); border:1px solid var(--steel);
+    border-left:3px solid var(--accent); border-radius:8px;
+    font-size:0.76rem; color:var(--chalk-dim); line-height:1.5;
+  }
+  .partner-banner strong{
+    color:var(--chalk); text-transform:uppercase; letter-spacing:0.05em; font-size:0.7rem;
+  }
+
+  .cell-input:disabled{
+    background:transparent; border-color:transparent;
+    color:var(--chalk-dim); opacity:1; -webkit-text-fill-color:var(--chalk-dim);
+  }
+
   footer{ text-align:center; color:var(--steel-lt); font-size:0.7rem; padding:26px 14px 10px; letter-spacing:0.04em; }
 </style>
 </head>
@@ -224,7 +248,7 @@
   <div id="exerciseList"></div>
 </main>
 
-<footer>DAPRE progression. All data stays on your device. Log it. Lift it. Beat it next time.</footer>
+<footer>DAPRE progression. Saved on your device, backed up to the cloud. Log it. Lift it. Beat it next time.</footer>
 
 <div class="toast" id="toast"></div>
 
@@ -232,7 +256,11 @@
 (function(){
   "use strict";
 
+  var PERSON = "sandy";
   var STORAGE_KEY = "ironlog_data_sandy_v1";
+  var SYNC_URL = "/api/sync?person=" + PERSON;
+  var PARTNER = null;
+  var MAX_HISTORY = 24;
 
   var SEED_DAYS = [
     { dayName: "Monday", label: "Mon", exercises: [
@@ -269,14 +297,90 @@
     ]}
   ];
 
-  var state = load();
-  var currentDayIdx = getTodayIndex();
+  /* ------------------------------------------------------------------ */
+  /* dates                                                              */
+  /* ------------------------------------------------------------------ */
 
-  function getTodayIndex(){
-    var d = new Date();
-    var dayOfWeek = d.getDay();
-    var mondayIdx = dayOfWeek === 0 ? 4 : dayOfWeek - 1;
-    return Math.max(0, Math.min(4, mondayIdx));
+  function dateKey(d){
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+
+  function todayKey(){
+    return dateKey(new Date());
+  }
+
+  function prettyDate(key){
+    if(!key) return "";
+    var parts = String(key).split("-");
+    if(parts.length !== 3) return String(key);
+    return parts[1].replace(/^0/, "") + "/" + parts[2].replace(/^0/, "");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* math: 1RM + DAPRE                                                  */
+  /* ------------------------------------------------------------------ */
+
+  function epley1RM(weight, reps){
+    if(!weight || !reps) return 0;
+    return weight * (1 + reps / 30);
+  }
+
+  function bestE1RM(sets){
+    var best = 0;
+    for(var i=0;i<sets.length;i++){
+      var e = epley1RM(sets[i].weight, sets[i].reps);
+      if(e > best) best = e;
+    }
+    return best;
+  }
+
+  // Planet Fitness plate math: every suggested weight lands on a 5 lb increment.
+  // This is the ONLY rounding helper — nothing else may round a weight.
+  function round5(n){
+    if(typeof n !== "number" || !isFinite(n)) return null;
+    return Math.max(0, Math.round(n / 5) * 5);
+  }
+
+  function dapreDelta(reps){
+    if(reps === null || reps === undefined || isNaN(reps)) return null;
+    if(reps >= 16) return 10;
+    if(reps === 15) return 7.5;
+    if(reps >= 13) return 5;     // 13-14
+    if(reps >= 10) return 2.5;   // 10-12
+    if(reps >= 8) return 0;      // 8-9 hold
+    if(reps >= 6) return -2.5;   // 6-7
+    return -5;                   // <= 5
+  }
+
+  function dapre(weight, reps){
+    if(!weight || reps === null || reps === undefined) return null;
+    var delta = dapreDelta(reps);
+    if(delta === null) return null;
+    return round5(weight + delta);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* state                                                              */
+  /* ------------------------------------------------------------------ */
+
+  function uid(){
+    return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  }
+
+  function normalizeExercise(ex){
+    if(!ex) return ex;
+    if(!Array.isArray(ex.sets)) ex.sets = [];
+    if(!Array.isArray(ex.history)) ex.history = [];
+    return ex;
+  }
+
+  function normalizeState(data){
+    if(!data || !Array.isArray(data.exercises)) return null;
+    data.exercises.forEach(normalizeExercise);
+    if(!data.lastActiveDate) data.lastActiveDate = todayKey();
+    return data;
   }
 
   function migrateOldData(){
@@ -314,62 +418,222 @@
           name: ex.name,
           dayName: group.dayName,
           target: ex.target,
-          sets: []
+          sets: [],
+          history: []
         });
       });
     });
-    return { exercises: exercises };
+    return { exercises: exercises, lastActiveDate: todayKey() };
   }
 
   function load(){
     try{
-      var migrated = migrateOldData();
-      if(migrated) return migrated;
-      return buildSeedState();
+      return normalizeState(migrateOldData()) || buildSeedState();
     }catch(e){
       return buildSeedState();
     }
   }
 
+  var state = load();
+  var currentDayIdx = getTodayIndex();
+
+  function getTodayIndex(){
+    var d = new Date();
+    var dayOfWeek = d.getDay();
+    var mondayIdx = dayOfWeek === 0 ? 4 : dayOfWeek - 1;
+    return Math.max(0, Math.min(4, mondayIdx));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* persistence: localStorage first, cloud backup after (never blocking) */
+  /* ------------------------------------------------------------------ */
+
+  var syncTimer = null;
+
   function save(){
+    // Local write always happens first and is never gated on the network.
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     catch(e){}
+    scheduleCloudBackup();
   }
 
-  function uid(){
-    return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  function scheduleCloudBackup(){
+    try{
+      if(syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(cloudBackup, 800);
+    }catch(e){}
   }
 
-  function epley1RM(weight, reps){
-    if(!weight || !reps) return 0;
-    return weight * (1 + reps / 30);
+  function cloudBackup(){
+    syncTimer = null;
+    try{
+      if(typeof fetch !== "function") return;
+      var body = JSON.stringify({
+        person: PERSON,
+        updatedAt: new Date().toISOString(),
+        state: state
+      });
+      var p = fetch(SYNC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body,
+        keepalive: true
+      });
+      // A failed sync must never surface to the lifter or break local logging.
+      if(p && typeof p.catch === "function") p.catch(function(){});
+    }catch(e){}
   }
 
-  function bestE1RM(sets){
-    var best = 0;
-    for(var i=0;i<sets.length;i++){
-      var e = epley1RM(sets[i].weight, sets[i].reps);
-      if(e > best) best = e;
+  window.addEventListener("pagehide", function(){
+    if(syncTimer){ clearTimeout(syncTimer); cloudBackup(); }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* session rollover + starting-weight projection                       */
+  /* ------------------------------------------------------------------ */
+
+  function isLoggedSet(s){
+    return !!s &&
+      typeof s.weight === "number" && s.weight > 0 &&
+      typeof s.reps === "number" && s.reps > 0;
+  }
+
+  // Archive whatever was logged on the previous calendar day into history and
+  // clear the working sets, so "today" always starts empty.
+  function rolloverSessions(){
+    var today = todayKey();
+    var previous = state.lastActiveDate;
+    if(previous === today) return false;
+
+    state.exercises.forEach(function(ex){
+      normalizeExercise(ex);
+      var logged = ex.sets.filter(isLoggedSet);
+      if(previous && logged.length > 0){
+        ex.history.push({
+          date: previous,
+          sets: logged.map(function(s){ return { weight: s.weight, reps: s.reps }; })
+        });
+        if(ex.history.length > MAX_HISTORY){
+          ex.history = ex.history.slice(-MAX_HISTORY);
+        }
+      }
+      ex.sets = [];
+      ex._justPR = false;
+    });
+
+    state.lastActiveDate = today;
+    return true;
+  }
+
+  function lastLoggedSet(ex){
+    for(var i = ex.sets.length - 1; i >= 0; i--){
+      if(isLoggedSet(ex.sets[i])) return ex.sets[i];
     }
-    return best;
+    return null;
   }
 
-  function round2half(n){
-    return Math.max(0, Math.round(n / 2.5) * 2.5);
+  // Last working set of the last *actual* session, read from history —
+  // not whatever number happens to be sitting in an input field.
+  function lastSessionWorkingSet(ex){
+    if(!Array.isArray(ex.history)) return null;
+    for(var i = ex.history.length - 1; i >= 0; i--){
+      var session = ex.history[i];
+      if(!session || !Array.isArray(session.sets)) continue;
+      for(var j = session.sets.length - 1; j >= 0; j--){
+        if(isLoggedSet(session.sets[j])){
+          return { weight: session.sets[j].weight, reps: session.sets[j].reps, date: session.date };
+        }
+      }
+    }
+    return null;
   }
 
-  function dapre(weight, reps){
-    if(!weight || reps === null) return null;
-    if(reps >= 16) return round2half(weight + 10);
-    if(reps === 15) return round2half(weight + 7.5);
-    if(reps >= 13) return round2half(weight + 5);
-    if(reps >= 10) return round2half(weight + 2.5);
-    if(reps === 9) return weight;
-    if(reps === 8) return weight;
-    if(reps >= 6) return round2half(weight - 2.5);
-    if(reps === 5) return round2half(weight - 5);
-    if(reps < 5) return round2half(weight - 5);
-    return weight;
+  function startingWeight(ex){
+    var s = lastSessionWorkingSet(ex);
+    if(!s) return null;
+    return dapre(s.weight, s.reps);
+  }
+
+  // Every weight suggestion in the app funnels through here.
+  function suggestedWeight(ex){
+    var last = lastLoggedSet(ex);
+    if(last) return dapre(last.weight, last.reps);
+    return startingWeight(ex);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* partner (read-only) view                                            */
+  /* ------------------------------------------------------------------ */
+
+  var viewMode = "self";        // "self" | "partner"
+  var partnerState = null;
+  var partnerStatus = "idle";   // idle | loading | ok | empty | error
+  var partnerUpdatedAt = null;
+
+  function isReadOnly(){ return viewMode === "partner"; }
+
+  function activeExercises(){
+    if(viewMode === "partner"){
+      return (partnerState && Array.isArray(partnerState.exercises)) ? partnerState.exercises : [];
+    }
+    return state.exercises;
+  }
+
+  function loadPartner(){
+    if(!PARTNER) return;
+    partnerStatus = "loading";
+    render();
+    fetch(PARTNER.url, { cache: "no-store" })
+      .then(function(res){
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function(body){
+        var incoming = (body && body.state) ? body.state : body;
+        partnerUpdatedAt = (body && body.updatedAt) || null;
+        if(!incoming || !Array.isArray(incoming.exercises) || incoming.exercises.length === 0){
+          partnerState = null;
+          partnerStatus = "empty";
+        } else {
+          incoming.exercises.forEach(normalizeExercise);
+          partnerState = incoming;
+          partnerStatus = "ok";
+        }
+        render();
+      })
+      .catch(function(err){
+        partnerState = null;
+        partnerStatus = "error";
+        partnerUpdatedAt = null;
+        render();
+      });
+  }
+
+  function togglePartner(){
+    if(!PARTNER) return;
+    if(viewMode === "partner"){
+      viewMode = "self";
+      render();
+      return;
+    }
+    viewMode = "partner";
+    if(partnerState) render();
+    else loadPartner();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* rendering                                                           */
+  /* ------------------------------------------------------------------ */
+
+  var listEl = document.getElementById("exerciseList");
+  var bannerEl = document.getElementById("partnerBanner");
+  var addRowEl = document.querySelector(".add-exercise");
+  var partnerBtn = document.getElementById("partnerToggle");
+
+  function escapeHtml(str){
+    var div = document.createElement("div");
+    div.textContent = str === null || str === undefined ? "" : str;
+    return div.innerHTML;
   }
 
   function renderTabs(){
@@ -389,32 +653,65 @@
     });
   }
 
-  var listEl = document.getElementById("exerciseList");
+  function renderChrome(){
+    if(partnerBtn){
+      partnerBtn.textContent = viewMode === "partner"
+        ? "← Back to My Log"
+        : "View " + PARTNER.label + " →";
+      partnerBtn.classList.toggle("is-active", viewMode === "partner");
+    }
+    if(addRowEl){
+      addRowEl.style.display = isReadOnly() ? "none" : "";
+    }
+    if(bannerEl){
+      if(!PARTNER || viewMode !== "partner"){
+        bannerEl.style.display = "none";
+        bannerEl.innerHTML = "";
+      } else {
+        bannerEl.style.display = "";
+        var note = "";
+        if(partnerStatus === "loading") note = "Loading…";
+        else if(partnerStatus === "error") note = "Could not reach " + PARTNER.label + "'s log.";
+        else if(partnerStatus === "empty") note = "No cloud data yet — " + PARTNER.label + " needs to open her app and log once.";
+        else if(partnerStatus === "ok" && partnerUpdatedAt) note = "Last synced " + escapeHtml(new Date(partnerUpdatedAt).toLocaleString());
+        bannerEl.innerHTML = "<strong>Read-only:</strong> " + escapeHtml(PARTNER.label) + "'s log. " + note;
+      }
+    }
+  }
 
   function renderExercises(){
     listEl.innerHTML = "";
     var dayName = SEED_DAYS[currentDayIdx].dayName;
-    var dayExercises = state.exercises.filter(function(ex){ return ex.dayName === dayName; });
+    var readOnly = isReadOnly();
+    var dayExercises = activeExercises().filter(function(ex){ return ex.dayName === dayName; });
 
     if(dayExercises.length === 0){
       var empty = document.createElement("div");
       empty.className = "empty";
-      empty.innerHTML = "<strong>No exercises for this day</strong>Add one above to start logging sets.";
+      if(readOnly){
+        var msg = partnerStatus === "loading" ? "Loading her log…"
+          : partnerStatus === "error" ? "Could not reach her log. Try again in a moment."
+          : partnerStatus === "empty" ? "She has not synced any data yet."
+          : "Nothing logged for this day.";
+        empty.innerHTML = "<strong>" + escapeHtml(PARTNER.label) + "'s log</strong>" + escapeHtml(msg);
+      } else {
+        empty.innerHTML = "<strong>No exercises for this day</strong>Add one above to start logging sets.";
+      }
       listEl.appendChild(empty);
       return;
     }
 
     dayExercises.forEach(function(ex){
-      listEl.appendChild(renderExercise(ex));
+      listEl.appendChild(renderExercise(ex, readOnly));
     });
   }
 
-  function renderExercise(ex){
+  function renderExercise(ex, readOnly){
     var card = document.createElement("div");
     card.className = "exercise";
 
     var best1RM = bestE1RM(ex.sets);
-    var justHitPR = ex._justPR === true;
+    var justHitPR = ex._justPR === true && !readOnly;
 
     var head = document.createElement("div");
     head.className = "exercise-head";
@@ -429,12 +726,12 @@
           (ex.target ? '<div class="exercise-target">Target: ' + escapeHtml(ex.target) + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '<button class="btn-ghost btn-danger" data-action="delete-exercise" data-id="' + ex.id + '">Remove</button>';
+      (readOnly ? '' : '<button class="btn-ghost btn-danger" data-action="delete-exercise" data-id="' + escapeHtml(ex.id) + '">Remove</button>');
     card.appendChild(head);
 
     var table = document.createElement("table");
     var thead = document.createElement("thead");
-    thead.innerHTML = '<tr><th>Set</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th><th></th></tr>';
+    thead.innerHTML = '<tr><th>Set</th><th>Weight</th><th>Reps</th><th>Est. 1RM</th>' + (readOnly ? '' : '<th></th>') + '</tr>';
     table.appendChild(thead);
 
     var tbody = document.createElement("tbody");
@@ -443,51 +740,66 @@
       var e1rm = epley1RM(set.weight, set.reps);
       tr.innerHTML =
         '<td class="set-num">' + (idx + 1) + '</td>' +
-        '<td><input class="cell-input" type="number" inputmode="decimal" step="2.5" min="0" ' +
-            'value="' + (set.weight !== null ? set.weight : "") + '" ' +
-            'data-action="set-weight" data-id="' + ex.id + '" data-idx="' + idx + '"></td>' +
+        '<td><input class="cell-input" type="number" inputmode="decimal" step="5" min="0" ' +
+            (readOnly ? 'disabled ' : '') +
+            'value="' + (set.weight !== null && set.weight !== undefined ? set.weight : "") + '" ' +
+            'data-action="set-weight" data-id="' + escapeHtml(ex.id) + '" data-idx="' + idx + '"></td>' +
         '<td><input class="cell-input" type="number" inputmode="numeric" step="1" min="0" ' +
-            'value="' + (set.reps !== null ? set.reps : "") + '" ' +
-            'data-action="set-reps" data-id="' + ex.id + '" data-idx="' + idx + '"></td>' +
+            (readOnly ? 'disabled ' : '') +
+            'value="' + (set.reps !== null && set.reps !== undefined ? set.reps : "") + '" ' +
+            'data-action="set-reps" data-id="' + escapeHtml(ex.id) + '" data-idx="' + idx + '"></td>' +
         '<td class="rm-cell">' + (e1rm > 0 ? Math.round(e1rm) : "—") + '</td>' +
-        '<td><button class="del-set" data-action="delete-set" data-id="' + ex.id + '" data-idx="' + idx + '" aria-label="Delete set">✕</button></td>';
+        (readOnly ? '' : '<td><button class="del-set" data-action="delete-set" data-id="' + escapeHtml(ex.id) + '" data-idx="' + idx + '" aria-label="Delete set">✕</button></td>');
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
     card.appendChild(table);
 
-    var lastSet = ex.sets.length > 0 ? ex.sets[ex.sets.length - 1] : null;
-    var nextWeight = lastSet && lastSet.weight && lastSet.reps !== null ? dapre(lastSet.weight, lastSet.reps) : null;
+    var last = lastLoggedSet(ex);
+    var next = suggestedWeight(ex);
     var predictRow = document.createElement("div");
     predictRow.className = "predict-row";
-    if(nextWeight !== null){
+
+    if(next !== null && last){
       predictRow.innerHTML =
         '<div><div class="predict-label">DAPRE Next Weight</div>' +
-        '<div class="predict-note">Based on reps achieved</div></div>' +
-        '<div class="predict-value">' + nextWeight + ' lb</div>';
+        '<div class="predict-note">From ' + last.weight + ' lb × ' + last.reps + ' reps this session</div></div>' +
+        '<div class="predict-value">' + next + ' lb</div>';
+    } else if(next !== null){
+      var prev = lastSessionWorkingSet(ex);
+      predictRow.innerHTML =
+        '<div><div class="predict-label">Start Today At</div>' +
+        '<div class="predict-note">Last session' + (prev && prev.date ? ' (' + escapeHtml(prettyDate(prev.date)) + ')' : '') +
+          ': ' + prev.weight + ' lb × ' + prev.reps + ' reps</div></div>' +
+        '<div class="predict-value">' + next + ' lb</div>';
     } else {
       predictRow.innerHTML = '<div class="predict-label">Log a set to see DAPRE recommendation.</div>';
     }
     card.appendChild(predictRow);
 
-    var actions = document.createElement("div");
-    actions.className = "exercise-actions";
-    var addSetBtn = document.createElement("button");
-    addSetBtn.className = "btn-ghost";
-    addSetBtn.textContent = nextWeight !== null ? "Add Set (" + nextWeight + " lb)" : "Add Set";
-    addSetBtn.setAttribute("data-action", "add-set");
-    addSetBtn.setAttribute("data-id", ex.id);
-    actions.appendChild(addSetBtn);
-    card.appendChild(actions);
+    if(!readOnly){
+      var actions = document.createElement("div");
+      actions.className = "exercise-actions";
+      var addSetBtn = document.createElement("button");
+      addSetBtn.className = "btn-ghost";
+      addSetBtn.textContent = next !== null ? "Add Set (" + next + " lb)" : "Add Set";
+      addSetBtn.setAttribute("data-action", "add-set");
+      addSetBtn.setAttribute("data-id", ex.id);
+      actions.appendChild(addSetBtn);
+      card.appendChild(actions);
+    }
 
     return card;
   }
 
-  function escapeHtml(str){
-    var div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
+  function render(){
+    renderChrome();
+    renderExercises();
   }
+
+  /* ------------------------------------------------------------------ */
+  /* mutations                                                           */
+  /* ------------------------------------------------------------------ */
 
   function findExercise(id){
     for(var i=0;i<state.exercises.length;i++){
@@ -497,25 +809,27 @@
   }
 
   function addExercise(name){
+    if(isReadOnly()) return;
     name = (name || "").trim();
     if(!name) return;
     var dayName = SEED_DAYS[currentDayIdx].dayName;
-    state.exercises.push({ id: uid(), name: name, dayName: dayName, target: null, sets: [] });
+    state.exercises.push({ id: uid(), name: name, dayName: dayName, target: null, sets: [], history: [] });
     save();
     renderExercises();
   }
 
   function deleteExercise(id){
+    if(isReadOnly()) return;
     state.exercises = state.exercises.filter(function(ex){ return ex.id !== id; });
     save();
     renderExercises();
   }
 
   function addSet(id){
+    if(isReadOnly()) return;
     var ex = findExercise(id);
     if(!ex) return;
-    var lastSet = ex.sets.length > 0 ? ex.sets[ex.sets.length - 1] : null;
-    var predictedWeight = lastSet && lastSet.weight && lastSet.reps !== null ? dapre(lastSet.weight, lastSet.reps) : null;
+    var predictedWeight = suggestedWeight(ex);
     var prevBest = bestE1RM(ex.sets);
 
     ex.sets.push({ weight: predictedWeight !== null ? predictedWeight : null, reps: null });
@@ -528,6 +842,7 @@
   }
 
   function deleteSet(id, idx){
+    if(isReadOnly()) return;
     var ex = findExercise(id);
     if(!ex) return;
     ex.sets.splice(idx, 1);
@@ -536,6 +851,7 @@
   }
 
   function updateSetField(id, idx, field, rawValue){
+    if(isReadOnly()) return;
     var ex = findExercise(id);
     if(!ex || !ex.sets[idx]) return;
     var num = rawValue === "" ? null : parseFloat(rawValue);
@@ -544,6 +860,10 @@
     save();
     renderExercises();
   }
+
+  /* ------------------------------------------------------------------ */
+  /* wiring                                                              */
+  /* ------------------------------------------------------------------ */
 
   document.getElementById("addExerciseBtn").addEventListener("click", function(){
     var input = document.getElementById("newExerciseInput");
@@ -560,6 +880,7 @@
   });
 
   listEl.addEventListener("click", function(e){
+    if(isReadOnly()) return;
     var el = e.target.closest("[data-action]");
     if(!el) return;
     var action = el.getAttribute("data-action");
@@ -575,6 +896,7 @@
   });
 
   listEl.addEventListener("change", function(e){
+    if(isReadOnly()) return;
     var el = e.target;
     var action = el.getAttribute("data-action");
     if(action === "set-weight" || action === "set-reps"){
@@ -585,8 +907,28 @@
     }
   });
 
+  if(partnerBtn){
+    partnerBtn.addEventListener("click", togglePartner);
+  }
+
+  function checkRollover(){
+    if(rolloverSessions()){
+      currentDayIdx = getTodayIndex();
+      save();
+      renderTabs();
+      render();
+    }
+  }
+
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden) checkRollover();
+  });
+
+  // Roll yesterday's work into history before the first paint.
+  if(rolloverSessions()) save();
+
   renderTabs();
-  renderExercises();
+  render();
 })();
 </script>
 

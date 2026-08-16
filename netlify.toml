@@ -2,6 +2,15 @@
   publish = "."
   command = ""
 
+[functions]
+  directory = "netlify/functions"
+
+# Must come BEFORE the SPA catch-all below, or /* swallows the API call.
+[[redirects]]
+  from = "/api/sync"
+  to = "/.netlify/functions/sync"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
