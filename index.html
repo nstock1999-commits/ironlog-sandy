@@ -200,6 +200,12 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+  .tab-btn{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .tab-focus{
+    font-size:0.58rem; font-weight:600; letter-spacing:0.09em;
+    text-transform:uppercase; opacity:0.65;
+  }
+
   .partner-toggle{
     background:transparent; color:var(--chalk-dim); border:1px solid var(--steel);
     border-radius:999px; padding:7px 14px; font-size:0.78rem;
@@ -263,39 +269,49 @@
   var MAX_HISTORY = 24;
 
   var SEED_DAYS = [
-    { dayName: "Monday", label: "Mon", exercises: [
-      { name: "Squat", target: "5x6-10" },
-      { name: "Leg Press (superset → next)", target: "4x8-12" },
-      { name: "Leg Extension (superset w/ Leg Press)", target: "4x8-10" },
-      { name: "Stiff Leg Deadlift", target: "4x8-12" },
-      { name: "Leg Curl (Drop Sets)", target: "4x8-10" }
+    { dayName: "Monday", label: "Mon", focus: "Upper", exercises: [
+      { name: "Barbell Bench Press", target: "DAPRE — 4 sets", primary: true },
+      { name: "Machine Row", target: "4 x 8-12" },
+      { name: "Incline DB Bench Press", target: "3 x 10-15" },
+      { name: "Lat Pull Downs", target: "3 x 10-12" },
+      { name: "DB Lateral Raise", target: "4 x 12-20" },
+      { name: "EZ Bar Preacher Curls", target: "3 x 10-15" }
     ]},
-    { dayName: "Tuesday", label: "Tue", exercises: [
-      { name: "Barbell Bench Press", target: "4x6-10" },
-      { name: "Incline DB Bench Press (superset → next)", target: "5x10-15" },
-      { name: "Incline DB Flys (superset w/ Incline Press)", target: "5x10-15" },
-      { name: "Pec Dec (Drop set 3rd set)", target: "4x8-10" },
-      { name: "Seated Calf Raise", target: "6x12-20" }
+    { dayName: "Tuesday", label: "Tue", focus: "Lower", exercises: [
+      { name: "Squat", target: "DAPRE — 4 sets", primary: true },
+      { name: "Stiff Leg Deadlift", target: "4 x 8-12" },
+      { name: "Seated Leg Curl", target: "3 x 10-15" },
+      { name: "Leg Extension", target: "3 x 12-15" },
+      { name: "Standing Calf Raise", target: "4 x 10-15" }
     ]},
-    { dayName: "Wednesday", label: "Wed", exercises: [
-      { name: "Seated Barbell Press", target: "4x6-10" },
-      { name: "DB Lateral Raise (Drop set last set)", target: "5x12-20" },
-      { name: "Cable Reverse Fly", target: "4x12-15" }
+    { dayName: "Wednesday", label: "Wed", focus: "Push", exercises: [
+      { name: "Seated Barbell Press", target: "DAPRE — 4 sets", primary: true },
+      { name: "Incline DB Flys", target: "3 x 10-15" },
+      { name: "Pec Dec", target: "3 x 10-15" },
+      { name: "Cable Lateral Raise", target: "4 x 12-20" },
+      { name: "EZ Bar Skullcrushers", target: "3 x 10-15" },
+      { name: "Cable Tricep Extensions", target: "3 x 12-15" }
     ]},
-    { dayName: "Thursday", label: "Thu", exercises: [
-      { name: "Lat Pull Downs", target: "4x8-12" },
-      { name: "Machine Row (Low Rows)", target: "4x8-12" },
-      { name: "Reverse Grip Lat Pull Downs (Drop Sets)", target: "4x10-15" },
-      { name: "Barbell Shrug ss/ Bent Over Row", target: "4x10-15" }
+    { dayName: "Thursday", label: "Thu", focus: "Pull", exercises: [
+      { name: "Reverse Grip Lat Pull Downs", target: "DAPRE — 4 sets", primary: true },
+      { name: "Seated Cable Row", target: "4 x 8-12" },
+      { name: "Cable Reverse Fly", target: "3 x 12-20" },
+      { name: "Barbell Shrug", target: "3 x 10-15" },
+      { name: "Incline DB Curl", target: "3 x 10-15" },
+      { name: "Standing Hammer Curl", target: "3 x 12-15" }
     ]},
-    { dayName: "Friday", label: "Fri", exercises: [
-      { name: "EZ Bar Skullcrushers", target: "4x8-12" },
-      { name: "Cable Tricep Extensions", target: "4x10-15" },
-      { name: "Reverse Grip Cable Tricep Ext (Drop Sets)", target: "3x12-15" },
-      { name: "EZ Bar Preacher Curls", target: "5x8-12" },
-      { name: "Standing Hammer Curl (Drop Sets)", target: "4x12-15" }
+    { dayName: "Friday", label: "Fri", focus: "Legs", exercises: [
+      { name: "Leg Press", target: "DAPRE — 4 sets", primary: true },
+      { name: "Bulgarian Split Squat", target: "3 x 10-12" },
+      { name: "Lying Leg Curl", target: "3 x 10-15" },
+      { name: "Walking Lunge", target: "3 x 10-12" },
+      { name: "Seated Calf Raise", target: "4 x 12-20" }
     ]}
   ];
+
+  // Bumped whenever the seeded program changes, so an existing log is
+  // reconciled onto the new plan instead of being left on the old one.
+  var PROGRAM_VERSION = 2;
 
   /* ------------------------------------------------------------------ */
   /* dates                                                              */
@@ -414,6 +430,7 @@
     if(!data || !Array.isArray(data.exercises)) return null;
     data.exercises.forEach(normalizeExercise);
     if(!data.lastActiveDate) data.lastActiveDate = todayKey();
+    reconcileProgram(data);
     return data;
   }
 
@@ -452,12 +469,76 @@
           name: ex.name,
           dayName: group.dayName,
           target: ex.target,
+          primary: !!ex.primary,
           sets: [],
           history: []
         });
       });
     });
-    return { exercises: exercises, lastActiveDate: todayKey() };
+    return { exercises: exercises, lastActiveDate: todayKey(), programVersion: PROGRAM_VERSION };
+  }
+
+  // Exercise names carry annotations ("Leg Press (superset -> next)",
+  // "Barbell Shrug ss/ Bent Over Row"). Match on the movement itself so a
+  // renamed lift keeps the history already logged against it.
+  function normalizeName(n){
+    return String(n || "")
+      .toLowerCase()
+      .replace(/\(.*$/, "")
+      .replace(/\bss\/.*$/, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  // Move an existing log onto the current program. Every logged set and every
+  // archived session survives; nothing is deleted.
+  // Set when a load migrated the program, so the result gets persisted
+  // instead of being silently re-derived on every open.
+  var programMigrated = false;
+
+  function reconcileProgram(data){
+    if(data.programVersion === PROGRAM_VERSION) return false;
+
+    var byName = {};
+    data.exercises.forEach(function(ex){
+      var k = normalizeName(ex.name);
+      if(!byName[k]) byName[k] = ex;
+    });
+
+    var next = [];
+    SEED_DAYS.forEach(function(day){
+      day.exercises.forEach(function(seed){
+        var k = normalizeName(seed.name);
+        var existing = byName[k];
+        if(existing){
+          existing.name = seed.name;
+          existing.dayName = day.dayName;
+          existing.target = seed.target;
+          existing.primary = !!seed.primary;
+          next.push(existing);
+          delete byName[k];
+        } else {
+          next.push({
+            id: uid(), name: seed.name, dayName: day.dayName,
+            target: seed.target, primary: !!seed.primary,
+            sets: [], history: []
+          });
+        }
+      });
+    });
+
+    // Lifts the new program dropped, plus anything added by hand: keep them if
+    // they hold real work, on whichever day they already lived.
+    Object.keys(byName).forEach(function(k){
+      var ex = byName[k];
+      var hasWork = (ex.sets && ex.sets.length) || (ex.history && ex.history.length);
+      if(hasWork){ ex.primary = false; next.push(ex); }
+    });
+
+    data.exercises = next;
+    data.programVersion = PROGRAM_VERSION;
+    programMigrated = true;
+    return true;
   }
 
   function load(){
@@ -676,7 +757,8 @@
     SEED_DAYS.forEach(function(day, idx){
       var btn = document.createElement("button");
       btn.className = "tab-btn" + (idx === currentDayIdx ? " active" : "");
-      btn.textContent = day.label;
+      btn.innerHTML = escapeHtml(day.label) +
+        '<span class="tab-focus">' + escapeHtml(day.focus || "") + '</span>';
       btn.setAttribute("data-idx", idx);
       btn.addEventListener("click", function(){
         currentDayIdx = idx;
@@ -960,8 +1042,9 @@
     if(!document.hidden) checkRollover();
   });
 
-  // Roll yesterday's work into history before the first paint.
-  if(rolloverSessions()) save();
+  // Roll yesterday's work into history before the first paint, and persist a
+  // program migration so it survives the session and reaches the cloud backup.
+  if(rolloverSessions() || programMigrated) save();
 
   renderTabs();
   render();
