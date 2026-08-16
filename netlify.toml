@@ -9,6 +9,24 @@
 # [functions."reminders"] block here. v1 handlers never receive the Netlify
 # Blobs context on a scheduled run; v2 does.
 
+# An installed PWA will happily serve a cached index.html for days, which means
+# a shipped fix silently does not reach the phone. Force revalidation on the
+# entry point and the service worker; hashed assets are unaffected.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 # API routes must come BEFORE the SPA catch-all below, or /* swallows them.
 [[redirects]]
   from = "/api/sync"
