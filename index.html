@@ -354,11 +354,45 @@
     return -5;                   // <= 5
   }
 
+  // A single 5 lb plate is ~2% of a squat but ~25% of a 20 lb lateral raise.
+  // Flat 5 lb jumps overshoot the rep target on light movements, so no single
+  // increase may exceed this fraction of the current load.
+  var MAX_INCREASE_PCT = 0.10;
+
+  // Reps that earn the smallest real step (5 lb) on a light lift -- i.e. top
+  // of the working range. Below this, a capped lift holds instead.
+  var EARN_STEP_REPS = 13;
+
   function dapre(weight, reps){
     if(!weight || reps === null || reps === undefined) return null;
     var delta = dapreDelta(reps);
     if(delta === null) return null;
-    return round5(weight + delta);
+
+    var current = round5(weight);
+    var next = round5(weight + delta);
+    if(current === null || next === null) return null;
+
+    if(next > current){
+      var ceiling = current * (1 + MAX_INCREASE_PCT);
+      if(next > ceiling){
+        // 5 lb is the smallest plate we can actually load, so on light lifts
+        // hold until the top of the range earns that step (double progression).
+        next = reps >= EARN_STEP_REPS ? current + 5 : current;
+      }
+    }
+    return next;
+  }
+
+  // True when the percentage cap suppressed an increase, so the UI can explain
+  // why the weight is not moving.
+  function dapreHeldByCap(weight, reps){
+    if(!weight || reps === null || reps === undefined) return false;
+    var delta = dapreDelta(reps);
+    if(delta === null || delta <= 0) return false;
+    var current = round5(weight);
+    if(current === null) return false;
+    return round5(weight + delta) > current * (1 + MAX_INCREASE_PCT) &&
+           reps < EARN_STEP_REPS;
   }
 
   /* ------------------------------------------------------------------ */
@@ -763,7 +797,9 @@
     if(next !== null && last){
       predictRow.innerHTML =
         '<div><div class="predict-label">DAPRE Next Weight</div>' +
-        '<div class="predict-note">From ' + last.weight + ' lb × ' + last.reps + ' reps this session</div></div>' +
+        '<div class="predict-note">From ' + last.weight + ' lb × ' + last.reps + ' reps this session' +
+          (dapreHeldByCap(last.weight, last.reps) ? ' — holding, ' + EARN_STEP_REPS + '+ reps earns +5 lb' : '') +
+        '</div></div>' +
         '<div class="predict-value">' + next + ' lb</div>';
     } else if(next !== null){
       var prev = lastSessionWorkingSet(ex);
