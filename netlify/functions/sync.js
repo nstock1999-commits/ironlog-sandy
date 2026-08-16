@@ -75,7 +75,11 @@ function countWork(state) {
         }
       }
       if (Array.isArray(ex.history)) {
-        for (const h of ex.history) n += (h && Array.isArray(h.sets)) ? h.sets.length : 0;
+        // Skip imported starting weights -- they are a seeded floor, not
+        // logged work, and must not make an empty log look populated.
+        for (const h of ex.history) {
+          if (h && !h.imported && Array.isArray(h.sets)) n += h.sets.length;
+        }
       }
     }
   }

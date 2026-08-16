@@ -665,6 +665,7 @@
     data.exercises.forEach(normalizeExercise);
     if(!data.lastActiveDate) data.lastActiveDate = todayKey();
     reconcileProgram(data);
+    if(importStartingWeights(data)) programMigrated = true;
     normalizeNutrition(data);
     return data;
   }
@@ -710,8 +711,10 @@
         });
       });
     });
-    return normalizeNutrition({ exercises: exercises, lastActiveDate: todayKey(),
-                                programVersion: PROGRAM_VERSION });
+    var seeded = { exercises: exercises, lastActiveDate: todayKey(),
+                   programVersion: PROGRAM_VERSION };
+    importStartingWeights(seeded);
+    return normalizeNutrition(seeded);
   }
 
   // Exercise names carry annotations ("Leg Press (superset -> next)",
@@ -777,6 +780,59 @@
     data.exercises = next;
     data.programVersion = PROGRAM_VERSION;
     programMigrated = true;
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* starting weights imported from the tracker sheet                    */
+  /* ------------------------------------------------------------------ */
+
+  // Last working set recorded in the "CURRENT WORKOUT PROGRAM" sheet before
+  // this app existed, mapped onto the movement that replaced it. Seeded as one
+  // prior session so DAPRE and the pre-fill have a real number to start from
+  // instead of a blank box.
+  var IMPORT_DATE = "2026-08-07";
+  var IMPORT_VERSION = 1;
+  var IMPORTED_STARTS = {
+    "Smith Machine Squat": [
+        75,
+        10
+    ],
+    "Leg Press": [
+        217,
+        10
+    ],
+    "Smith Machine Bench Press": [
+        15,
+        10
+    ],
+    "Smith Machine OHP": [
+        45,
+        8
+    ]
+};
+
+  function hasAnyWork(ex){
+    if((ex.sets || []).some(isLoggedSet)) return true;
+    return (ex.history || []).length > 0;
+  }
+
+  function importStartingWeights(data){
+    if(data.startsImported >= IMPORT_VERSION) return false;
+
+    data.exercises.forEach(function(ex){
+      var seed = IMPORTED_STARTS[ex.name];
+      // Never write over something actually logged in the app -- the import is
+      // a floor for a cold start, not a source of truth.
+      if(!seed || hasAnyWork(ex)) return;
+      ex.history.push({
+        date: IMPORT_DATE,
+        imported: true,
+        sets: [{ weight: seed[0], reps: seed[1] }]
+      });
+    });
+
+    data.startsImported = IMPORT_VERSION;
     return true;
   }
 
@@ -1766,7 +1822,12 @@
     var n = 0;
     (st.exercises || []).forEach(function(ex){
       (ex.sets || []).forEach(function(s){ if(isLoggedSet(s)) n++; });
-      (ex.history || []).forEach(function(h){ n += (h && h.sets) ? h.sets.length : 0; });
+      // Imported starting weights are a cold-start floor, not logged work.
+      // Counting them would make a fresh install look non-empty and block
+      // the cloud restore that should bring the real history back.
+      (ex.history || []).forEach(function(h){
+        if(h && !h.imported) n += (h.sets || []).length;
+      });
     });
     if(st.nutrition && st.nutrition.entries) n += st.nutrition.entries.length;
     return n;
