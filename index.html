@@ -505,7 +505,8 @@
     { key: "fat",      label: "Fat (g)" }
   ];
 
-  var MAX_HISTORY = 24;
+  // Sessions kept per exercise. Enough to see a trend, not an archive.
+  var MAX_HISTORY = 6;
 
   var SEED_DAYS = [
     { dayName: "Monday", label: "Mon", focus: "Legs", exercises: [
@@ -592,15 +593,15 @@
     return Math.max(0, Math.round(n / 5) * 5);
   }
 
+  // Every adjustment is a whole 5 lb plate. The old 2.5 and 7.5 steps could not
+  // be loaded anyway, and rounding them silently turned +2.5 into +5 and -2.5
+  // into no change at all -- which made the back-off band do nothing.
   function dapreDelta(reps){
     if(reps === null || reps === undefined || isNaN(reps)) return null;
-    if(reps >= 16) return 10;
-    if(reps === 15) return 7.5;
-    if(reps >= 13) return 5;     // 13-14
-    if(reps >= 10) return 2.5;   // 10-12
+    if(reps >= 15) return 10;    // well past the range
+    if(reps >= 10) return 5;     // 10-14
     if(reps >= 8) return 0;      // 8-9 hold
-    if(reps >= 6) return -2.5;   // 6-7
-    return -5;                   // <= 5
+    return -5;                   // <= 7, now a real back-off
   }
 
   // A single 5 lb plate is ~2% of a squat but ~25% of a 20 lb lateral raise.
