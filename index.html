@@ -339,27 +339,29 @@
   .reminders{
     background:var(--surface); border:1px solid var(--steel);
     border-radius:var(--radius); padding:14px; margin-top:16px;
-    display:flex; flex-direction:column; gap:10px;
+    display:flex; flex-direction:column; gap:12px;
   }
   .reminders h3{
     margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
     color:var(--accent); font-weight:700;
   }
+  .rem-block{ display:flex; flex-direction:column; gap:9px; }
+  .rem-block + .rem-block{ border-top:1px solid var(--steel); padding-top:12px; }
   .rem-status{ font-size:0.74rem; color:var(--chalk-dim); line-height:1.5; }
   .rem-status.bad{ color:var(--pr); }
   .rem-status.good{ color:#7fd6a0; }
-  .rem-times{ display:flex; gap:8px; }
-  .rem-times > div{ flex:1; min-width:0; }
-  .rem-times label{
+  .rem-row{ display:flex; gap:8px; }
+  .rem-row > div{ flex:1; min-width:0; }
+  .rem-row label{
     display:block; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em;
     color:var(--chalk-dim); margin-bottom:4px; font-weight:600;
   }
-  .rem-times input{
+  .rem-row input, .rem-row select{
     background:var(--surface-2); border:1px solid var(--steel); color:var(--chalk);
     border-radius:8px; padding:11px 8px; font-size:0.95rem; width:100%;
     font-family:inherit; outline:none;
   }
-  .rem-times input:focus{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-dim); }
+  .rem-row input:focus, .rem-row select:focus{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-dim); }
   .rem-note{ font-size:0.66rem; color:var(--chalk-dim); line-height:1.5; }
 
   footer{ text-align:center; color:var(--steel-lt); font-size:0.7rem; padding:26px 14px 10px; letter-spacing:0.04em; }
@@ -436,17 +438,40 @@
     <div class="targets-form" id="nutTargetsForm" hidden></div>
 
     <div class="reminders" id="reminders">
-      <h3>Meal Reminders</h3>
-      <div class="rem-status" id="remStatus">Checking\u2026</div>
-      <div class="rem-times">
-        <div><label for="remT0">Breakfast</label><input type="time" id="remT0" value="08:00"></div>
-        <div><label for="remT1">Lunch</label><input type="time" id="remT1" value="12:30"></div>
-        <div><label for="remT2">Dinner</label><input type="time" id="remT2" value="18:30"></div>
+      <div class="rem-block" id="remMeals">
+        <h3>Meal Reminders</h3>
+        <div class="rem-status" id="remMealStatus">Checking&hellip;</div>
+        <div class="rem-row">
+          <div><label for="remT0">Breakfast</label><input type="time" id="remT0" value="08:00"></div>
+          <div><label for="remT1">Lunch</label><input type="time" id="remT1" value="12:30"></div>
+          <div><label for="remT2">Dinner</label><input type="time" id="remT2" value="18:30"></div>
+        </div>
+        <button class="btn-primary" id="remMealOn" type="button" style="padding:13px">Turn On Meal Reminders</button>
+        <button class="btn-ghost" id="remMealOff" type="button" hidden>Turn Off Meal Reminders</button>
       </div>
-      <button class="btn-primary" id="remEnable" type="button" style="padding:13px">Turn On Reminders</button>
-      <button class="btn-ghost" id="remDisable" type="button" hidden>Turn Off</button>
+      <div class="rem-block" id="remScan">
+        <h3>Body Comp Scan</h3>
+        <div class="rem-status" id="remScanStatus">Checking&hellip;</div>
+        <div class="rem-row">
+          <div><label for="remScanDate">Next scan</label><input type="date" id="remScanDate" value="2026-09-14"></div>
+          <div><label for="remScanTime">Time</label><input type="time" id="remScanTime" value="07:30"></div>
+        </div>
+        <div class="rem-row">
+          <div><label for="remScanEvery">Repeat</label>
+            <select id="remScanEvery">
+              <option value="28">Every 4 weeks</option>
+              <option value="35" selected>Every 5 weeks (deload weeks)</option>
+              <option value="42">Every 6 weeks</option>
+              <option value="56">Every 8 weeks</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-primary" id="remScanOn" type="button" style="padding:13px">Turn On Scan Reminder</button>
+        <button class="btn-ghost" id="remScanOff" type="button" hidden>Turn Off Scan Reminder</button>
+      </div>
       <div class="rem-note" id="remNote"></div>
     </div>
+
   </div>
 </main>
 
@@ -1499,11 +1524,12 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* meal reminders (web push)                                           */
+  /* reminders (web push)                                                */
   /* ------------------------------------------------------------------ */
 
   var PUSH_PUBLIC_KEY = "BIaeBUon_uhg6-8qg013x6J9lp7XF-_bS-FRNQ4bgBYMJg8xjwDGcPQ5bfBNsZVt4YKK7Jr8VCgbUWsbR7Pa_ZY";
   var PUSH_URL = "/api/push?person=" + PERSON;
+  var MEAL_REMINDERS = true;
 
   function urlBase64ToUint8Array(base64String){
     var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -1515,9 +1541,7 @@
   }
 
   function pushSupported(){
-    return "serviceWorker" in navigator &&
-           "PushManager" in window &&
-           "Notification" in window;
+    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   }
 
   // iOS only allows web push once the site is installed to the Home Screen.
@@ -1533,15 +1557,31 @@
 
   function remEl(id){ return document.getElementById(id); }
 
-  function setRemStatus(msg, cls){
-    var el = remEl("remStatus");
+  function setStatus(id, msg, cls){
+    var el = remEl(id);
     if(!el) return;
     el.textContent = msg;
     el.className = "rem-status" + (cls ? " " + cls : "");
   }
 
-  function readTimes(){
-    return [remEl("remT0").value, remEl("remT1").value, remEl("remT2").value];
+  function localTimezone(){
+    try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }catch(e){ return "UTC"; }
+  }
+
+  function prettyDate(iso){
+    if(!iso) return "";
+    var p = String(iso).split("-");
+    if(p.length !== 3) return iso;
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var mons = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return mons[d.getMonth()] + " " + d.getDate();
+  }
+
+  // A single gate for both reminder kinds: is push usable on this device at all?
+  function pushBlockedReason(){
+    if(!pushSupported()) return "This browser can't do notifications.";
+    if(isIOS() && !isStandalone()) return "Add to Home Screen first \u2014 see below.";
+    return null;
   }
 
   function showRemNote(){
@@ -1551,7 +1591,38 @@
       note.textContent = "On iPhone, notifications only work once this app is added to your Home Screen. " +
         "Tap Share, then Add to Home Screen, then open it from there and come back here.";
     } else {
-      note.textContent = "Reminders fire at these times in your local timezone, even when the app is closed.";
+      note.textContent = "Reminders fire in your local timezone, even when the app is closed.";
+    }
+  }
+
+  function applySettings(s){
+    if(!s) return;
+    if(MEAL_REMINDERS && remEl("remMeals")){
+      if(s.meals && s.meals.enabled && s.hasSubscription){
+        setStatus("remMealStatus", "On \u2014 " + s.meals.times.join(", "), "good");
+        remEl("remMealOn").textContent = "Update Meal Times";
+        remEl("remMealOff").removeAttribute("hidden");
+        for(var i = 0; i < 3; i++){ if(s.meals.times[i]) remEl("remT" + i).value = s.meals.times[i]; }
+      } else {
+        setStatus("remMealStatus", "Off. Pick your times and turn them on.");
+        remEl("remMealOn").textContent = "Turn On Meal Reminders";
+        remEl("remMealOff").setAttribute("hidden", "");
+      }
+    }
+    if(remEl("remScan")){
+      if(s.scan && s.scan.enabled && s.hasSubscription){
+        setStatus("remScanStatus", "On \u2014 next " + prettyDate(s.scan.nextDate) +
+          ", then every " + (s.scan.intervalDays / 7) + " weeks", "good");
+        remEl("remScanOn").textContent = "Update Scan Reminder";
+        remEl("remScanOff").removeAttribute("hidden");
+        if(s.scan.nextDate) remEl("remScanDate").value = s.scan.nextDate;
+        if(s.scan.time) remEl("remScanTime").value = s.scan.time;
+        if(s.scan.intervalDays) remEl("remScanEvery").value = String(s.scan.intervalDays);
+      } else {
+        setStatus("remScanStatus", "Off. Set the date and turn it on.");
+        remEl("remScanOn").textContent = "Turn On Scan Reminder";
+        remEl("remScanOff").setAttribute("hidden", "");
+      }
     }
   }
 
@@ -1559,61 +1630,26 @@
     if(!remEl("reminders")) return;
     showRemNote();
 
-    if(!pushSupported()){
-      setRemStatus("This browser can't do notifications.", "bad");
-      remEl("remEnable").disabled = true;
-      return;
-    }
-    if(isIOS() && !isStandalone()){
-      setRemStatus("Add to Home Screen first \u2014 see below.", "bad");
-      remEl("remEnable").disabled = true;
+    var blocked = pushBlockedReason();
+    if(blocked){
+      if(MEAL_REMINDERS) { setStatus("remMealStatus", blocked, "bad"); remEl("remMealOn").disabled = true; }
+      setStatus("remScanStatus", blocked, "bad");
+      remEl("remScanOn").disabled = true;
       return;
     }
 
     fetch(PUSH_URL, { cache: "no-store" })
       .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(s){
-        if(!s) return;
-        if(s.enabled && s.hasSubscription){
-          setRemStatus("On \u2014 " + s.times.join(", ") + " (" + (s.timezone || "local") + ")", "good");
-          remEl("remEnable").textContent = "Update Times";
-          remEl("remDisable").removeAttribute("hidden");
-          for(var i = 0; i < 3; i++){
-            if(s.times[i]) remEl("remT" + i).value = s.times[i];
-          }
-        } else {
-          setRemStatus("Off. Pick your times and turn them on.");
-          remEl("remEnable").textContent = "Turn On Reminders";
-          remEl("remDisable").setAttribute("hidden", "");
-        }
-      })
-      .catch(function(){ setRemStatus("Couldn't reach the reminder service."); });
+      .then(applySettings)
+      .catch(function(){
+        if(MEAL_REMINDERS) setStatus("remMealStatus", "Couldn't reach the reminder service.");
+        setStatus("remScanStatus", "Couldn't reach the reminder service.");
+      });
   }
 
-  function saveReminders(subscription){
-    var tz = "UTC";
-    try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }catch(e){}
-    return fetch(PUSH_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        enabled: true, subscription: subscription, times: readTimes(), timezone: tz
-      })
-    }).then(function(r){
-      if(!r.ok) return r.json().then(function(b){ throw new Error(b.error || ("HTTP " + r.status)); });
-      return r.json();
-    });
-  }
-
-  function enableReminders(){
-    setRemStatus("Setting up\u2026");
-    var times = readTimes();
-    if(times.some(function(t){ return !t; })){
-      setRemStatus("Set all three times first.", "bad");
-      return;
-    }
-
-    navigator.serviceWorker.register("/sw.js")
+  // Registers the worker, asks permission once, and returns a subscription.
+  function ensureSubscription(){
+    return navigator.serviceWorker.register("/sw.js")
       .then(function(){ return navigator.serviceWorker.ready; })
       .then(function(reg){
         return Notification.requestPermission().then(function(perm){
@@ -1627,35 +1663,79 @@
           });
         });
       })
-      .then(function(sub){ return saveReminders(sub.toJSON ? sub.toJSON() : sub); })
-      .then(function(){ toast("Reminders on"); refreshReminderUI(); })
-      .catch(function(err){
-        setRemStatus(err && err.message ? err.message : "Could not turn on reminders.", "bad");
-      });
+      .then(function(sub){ return sub.toJSON ? sub.toJSON() : sub; });
   }
 
-  function disableReminders(){
-    setRemStatus("Turning off\u2026");
-    fetch(PUSH_URL, {
+  function postSettings(body){
+    return fetch(PUSH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: false })
-    })
-      .then(function(){
-        if(!pushSupported()) return null;
-        return navigator.serviceWorker.ready
-          .then(function(reg){ return reg.pushManager.getSubscription(); })
-          .then(function(sub){ return sub ? sub.unsubscribe() : null; })
-          .catch(function(){ return null; });
+      body: JSON.stringify(body)
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(b){ throw new Error(b.error || ("HTTP " + r.status)); });
+      return r.json();
+    });
+  }
+
+  function enableMeals(){
+    var times = [remEl("remT0").value, remEl("remT1").value, remEl("remT2").value];
+    if(times.some(function(t){ return !t; })){
+      setStatus("remMealStatus", "Set all three times first.", "bad");
+      return;
+    }
+    setStatus("remMealStatus", "Setting up\u2026");
+    ensureSubscription()
+      .then(function(sub){
+        return postSettings({ subscription: sub, timezone: localTimezone(),
+                              meals: { enabled: true, times: times } });
       })
-      .then(function(){ toast("Reminders off"); refreshReminderUI(); })
-      .catch(function(){ setRemStatus("Could not turn reminders off.", "bad"); });
+      .then(function(s){ applySettings(s); toast("Meal reminders on"); })
+      .catch(function(err){ setStatus("remMealStatus", err.message || "Could not turn on reminders.", "bad"); });
+  }
+
+  function enableScan(){
+    var date = remEl("remScanDate").value;
+    if(!date){ setStatus("remScanStatus", "Pick a date first.", "bad"); return; }
+    setStatus("remScanStatus", "Setting up\u2026");
+    ensureSubscription()
+      .then(function(sub){
+        return postSettings({ subscription: sub, timezone: localTimezone(),
+          scan: { enabled: true, nextDate: date,
+                  time: remEl("remScanTime").value || "07:30",
+                  intervalDays: Number(remEl("remScanEvery").value) } });
+      })
+      .then(function(s){ applySettings(s); toast("Scan reminder on"); })
+      .catch(function(err){ setStatus("remScanStatus", err.message || "Could not turn on the reminder.", "bad"); });
+  }
+
+  // Turning one kind off leaves the other alone; the server only clears the
+  // subscription once nothing at all is enabled.
+  function disableKind(kind, statusId){
+    var body = {};
+    body[kind] = { enabled: false };
+    setStatus(statusId, "Turning off\u2026");
+    postSettings(body)
+      .then(function(s){
+        applySettings(s);
+        toast("Reminder off");
+        if(!s.hasSubscription && pushSupported()){
+          navigator.serviceWorker.ready
+            .then(function(reg){ return reg.pushManager.getSubscription(); })
+            .then(function(sub){ return sub ? sub.unsubscribe() : null; })
+            .catch(function(){});
+        }
+      })
+      .catch(function(){ setStatus(statusId, "Could not turn it off.", "bad"); });
   }
 
   function wireReminders(){
     if(!remEl("reminders")) return;
-    remEl("remEnable").addEventListener("click", enableReminders);
-    remEl("remDisable").addEventListener("click", disableReminders);
+    if(MEAL_REMINDERS && remEl("remMealOn")){
+      remEl("remMealOn").addEventListener("click", enableMeals);
+      remEl("remMealOff").addEventListener("click", function(){ disableKind("meals", "remMealStatus"); });
+    }
+    remEl("remScanOn").addEventListener("click", enableScan);
+    remEl("remScanOff").addEventListener("click", function(){ disableKind("scan", "remScanStatus"); });
     refreshReminderUI();
   }
 

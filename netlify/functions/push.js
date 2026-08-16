@@ -1,24 +1,28 @@
 "use strict";
 
 /**
- * Meal reminder settings + Web Push subscription storage.
+ * Reminder settings + Web Push subscription storage.
  *
  * Standard Netlify Functions API (exports.handler / event.httpMethod).
  *
- *   GET  /api/push?person=sandy  -> current settings (never returns the raw
- *                                   subscription; only whether one exists)
- *   POST /api/push?person=sandy  -> save { subscription, times, timezone, enabled }
- *   OPTIONS                      -> CORS preflight
+ *   GET  /api/push?person=nick  -> settings (never returns the raw
+ *                                  subscription; only whether one exists)
+ *   POST /api/push?person=nick  -> save { subscription, timezone, meals, scan }
+ *   OPTIONS                     -> CORS preflight
  *
- * The subscription itself is a bearer credential for pushing to her device, so
- * it is stored but never handed back out.
+ * Two independent reminder kinds share one subscription:
+ *   meals — three fixed times a day (Sandy only)
+ *   scan  — body composition scan, every N days from a chosen date (both)
+ *
+ * `meals` and `scan` are each optional in a POST; whichever is absent keeps its
+ * stored value, so one app can manage a kind the other never touches.
  */
 
 const { getStore } = require("@netlify/blobs");
 
 const STORE_NAME = "ironlog";
 const PEOPLE = ["nick", "sandy"];
-const SLOTS = 3;
+const MEAL_SLOTS = 3;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -46,8 +50,8 @@ function pushKey(person) {
   return "push/" + person;
 }
 
-// "08:00" / "8:5" -> "08:00" / "08:05". Anything else is rejected outright so a
-// malformed time cannot silently disable a reminder.
+// "8:05" -> "08:05". Anything out of range is rejected rather than coerced, so
+// a malformed time cannot silently mean "never fires".
 function normalizeTime(value) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(value || "").trim());
   if (!m) return null;
@@ -55,6 +59,15 @@ function normalizeTime(value) {
   const min = Number(m[2]);
   if (h < 0 || h > 23 || min < 0 || min > 59) return null;
   return String(h).padStart(2, "0") + ":" + String(min).padStart(2, "0");
+}
+
+function normalizeDate(value) {
+  const s = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + "T00:00:00Z");
+  if (isNaN(d.getTime())) return null;
+  // Reject a real-looking but nonexistent date such as 2026-02-30.
+  return d.toISOString().slice(0, 10) === s ? s : null;
 }
 
 function validTimezone(tz) {
@@ -67,17 +80,53 @@ function validTimezone(tz) {
   }
 }
 
+const DEFAULT_MEALS = { enabled: false, times: [], lastSent: {} };
+const DEFAULT_SCAN = { enabled: false, nextDate: null, intervalDays: 35, time: "07:30", lastSent: null };
+
+// Earlier builds stored meal settings flat on the record. Fold those into the
+// current shape so an existing subscription is not silently dropped.
+function migrate(record) {
+  if (!record) return null;
+  if (!record.meals && Array.isArray(record.times)) {
+    record.meals = {
+      enabled: !!record.enabled,
+      times: record.times,
+      lastSent: record.lastSent || {}
+    };
+    delete record.times;
+    delete record.lastSent;
+    delete record.enabled;
+  }
+  record.meals = Object.assign({}, DEFAULT_MEALS, record.meals || {});
+  record.scan = Object.assign({}, DEFAULT_SCAN, record.scan || {});
+  return record;
+}
+
 function publicView(record) {
   if (!record) {
-    return { enabled: false, times: [], timezone: null, hasSubscription: false };
+    return {
+      hasSubscription: false, timezone: null,
+      meals: Object.assign({}, DEFAULT_MEALS),
+      scan: Object.assign({}, DEFAULT_SCAN)
+    };
   }
   return {
-    enabled: !!record.enabled,
-    times: record.times || [],
-    timezone: record.timezone || null,
     hasSubscription: !!record.subscription,
-    updatedAt: record.updatedAt || null
+    timezone: record.timezone || null,
+    updatedAt: record.updatedAt || null,
+    meals: { enabled: !!record.meals.enabled, times: record.meals.times || [] },
+    scan: {
+      enabled: !!record.scan.enabled,
+      nextDate: record.scan.nextDate || null,
+      intervalDays: record.scan.intervalDays || DEFAULT_SCAN.intervalDays,
+      time: record.scan.time || DEFAULT_SCAN.time
+    }
   };
+}
+
+function validSubscription(sub) {
+  return !!(sub && typeof sub.endpoint === "string" && sub.keys &&
+            typeof sub.keys.p256dh === "string" && typeof sub.keys.auth === "string");
 }
 
 exports.handler = async function (event) {
@@ -101,13 +150,13 @@ exports.handler = async function (event) {
     return json(500, { error: "Blob store unavailable" });
   }
 
+  let existing = null;
+  try {
+    existing = migrate(await store.get(pushKey(person), { type: "json" }));
+  } catch (err) { /* treat an unreadable record as absent */ }
+
   if (method === "GET") {
-    try {
-      const record = await store.get(pushKey(person), { type: "json" });
-      return json(200, publicView(record));
-    } catch (err) {
-      return json(500, { error: "Failed to read reminder settings" });
-    }
+    return json(200, publicView(existing));
   }
 
   if (method === "POST") {
@@ -118,60 +167,68 @@ exports.handler = async function (event) {
       return json(400, { error: "Invalid JSON body" });
     }
 
-    const enabled = payload.enabled !== false;
+    const record = existing || {
+      person: person, subscription: null, timezone: "UTC",
+      meals: Object.assign({}, DEFAULT_MEALS),
+      scan: Object.assign({}, DEFAULT_SCAN)
+    };
 
-    // Turning reminders off clears the stored subscription rather than leaving
-    // a credential lying around for a device that no longer wants them.
-    if (!enabled) {
-      try {
-        const existing = await store.get(pushKey(person), { type: "json" });
-        const record = Object.assign({}, existing, {
-          enabled: false, subscription: null, updatedAt: new Date().toISOString()
-        });
-        await store.setJSON(pushKey(person), record);
-        return json(200, publicView(record));
-      } catch (err) {
-        return json(500, { error: "Failed to disable reminders" });
+    if (payload.subscription) {
+      if (!validSubscription(payload.subscription)) {
+        return json(400, { error: "Malformed push subscription." });
+      }
+      record.subscription = payload.subscription;
+    }
+    if (validTimezone(payload.timezone)) record.timezone = payload.timezone;
+
+    if (payload.meals) {
+      const wantOn = payload.meals.enabled !== false;
+      if (!wantOn) {
+        record.meals = Object.assign({}, record.meals, { enabled: false });
+      } else {
+        const raw = Array.isArray(payload.meals.times) ? payload.meals.times : [];
+        const times = raw.map(normalizeTime).filter(Boolean);
+        if (times.length !== MEAL_SLOTS) {
+          return json(400, { error: "Exactly " + MEAL_SLOTS + " meal times are required, as HH:MM.", received: raw });
+        }
+        // A changed schedule clears the send log, so a moved time can still
+        // fire today rather than counting as already sent.
+        const same = JSON.stringify(record.meals.times || []) === JSON.stringify(times);
+        record.meals = { enabled: true, times: times, lastSent: same ? (record.meals.lastSent || {}) : {} };
       }
     }
 
-    const sub = payload.subscription;
-    if (!sub || typeof sub.endpoint !== "string" || !sub.keys ||
-        typeof sub.keys.p256dh !== "string" || typeof sub.keys.auth !== "string") {
-      return json(400, { error: "A valid push subscription is required to enable reminders." });
+    if (payload.scan) {
+      const wantOn = payload.scan.enabled !== false;
+      if (!wantOn) {
+        record.scan = Object.assign({}, record.scan, { enabled: false });
+      } else {
+        const nextDate = normalizeDate(payload.scan.nextDate);
+        if (!nextDate) return json(400, { error: "scan.nextDate must be a real YYYY-MM-DD date." });
+        const time = normalizeTime(payload.scan.time) || DEFAULT_SCAN.time;
+        const interval = Number(payload.scan.intervalDays);
+        if (!isFinite(interval) || interval < 7 || interval > 180) {
+          return json(400, { error: "scan.intervalDays must be between 7 and 180." });
+        }
+        const same = record.scan.nextDate === nextDate &&
+                     record.scan.intervalDays === Math.round(interval) &&
+                     record.scan.time === time;
+        record.scan = {
+          enabled: true, nextDate: nextDate, intervalDays: Math.round(interval), time: time,
+          lastSent: same ? (record.scan.lastSent || null) : null
+        };
+      }
     }
 
-    const rawTimes = Array.isArray(payload.times) ? payload.times : [];
-    const times = rawTimes.map(normalizeTime).filter(Boolean);
-    if (times.length !== SLOTS) {
-      return json(400, {
-        error: "Exactly " + SLOTS + " reminder times are required, as HH:MM.",
-        received: rawTimes
-      });
+    const anyOn = record.meals.enabled || record.scan.enabled;
+    if (anyOn && !validSubscription(record.subscription)) {
+      return json(400, { error: "A push subscription is required to enable reminders." });
     }
+    // Nothing enabled means no reason to keep a credential for her device.
+    if (!anyOn) record.subscription = null;
 
-    const timezone = validTimezone(payload.timezone) ? payload.timezone : "UTC";
-
-    // Reset the per-slot send log whenever the schedule changes, so a moved
-    // time can still fire today instead of being treated as already sent.
-    let previous = null;
-    try {
-      previous = await store.get(pushKey(person), { type: "json" });
-    } catch (err) { /* treat as first write */ }
-
-    const sameSchedule = previous &&
-      JSON.stringify(previous.times || []) === JSON.stringify(times) &&
-      previous.timezone === timezone;
-
-    const record = {
-      person: person,
-      enabled: true,
-      subscription: sub,
-      times: times,
-      timezone: timezone,
-      lastSent: sameSchedule && previous.lastSent ? previous.lastSent : {},
-      updatedAt: new Date().toISOString()
-    };
+    record.person = person;
+    record.updatedAt = new Date().toISOString();
 
     try {
       await store.setJSON(pushKey(person), record);
@@ -185,5 +242,4 @@ exports.handler = async function (event) {
   return json(405, { error: "Method not allowed" });
 };
 
-// Exported for tests.
-exports._internal = { normalizeTime, validTimezone, publicView };
+exports._internal = { normalizeTime, normalizeDate, validTimezone, publicView, migrate };
