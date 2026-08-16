@@ -2,8 +2,9 @@
   "name": "ironlog",
   "version": "1.0.0",
   "private": true,
-  "description": "IRONLOG — DAPRE training log",
+  "description": "IRONLOG \u2014 DAPRE training log",
   "dependencies": {
-    "@netlify/blobs": "^10.7.13"
+    "@netlify/blobs": "^10.7.13",
+    "web-push": "^3.6.7"
   }
 }

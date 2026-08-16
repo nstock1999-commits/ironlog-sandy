@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="IRONLOG">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#160f1e">
 <title>IRONLOG — Sandy</title>
 <style>
   :root{
@@ -330,6 +336,32 @@
     padding:14px; margin-top:10px; display:flex; flex-direction:column; gap:10px;
   }
 
+  .reminders{
+    background:var(--surface); border:1px solid var(--steel);
+    border-radius:var(--radius); padding:14px; margin-top:16px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .reminders h3{
+    margin:0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--accent); font-weight:700;
+  }
+  .rem-status{ font-size:0.74rem; color:var(--chalk-dim); line-height:1.5; }
+  .rem-status.bad{ color:var(--pr); }
+  .rem-status.good{ color:#7fd6a0; }
+  .rem-times{ display:flex; gap:8px; }
+  .rem-times > div{ flex:1; min-width:0; }
+  .rem-times label{
+    display:block; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--chalk-dim); margin-bottom:4px; font-weight:600;
+  }
+  .rem-times input{
+    background:var(--surface-2); border:1px solid var(--steel); color:var(--chalk);
+    border-radius:8px; padding:11px 8px; font-size:0.95rem; width:100%;
+    font-family:inherit; outline:none;
+  }
+  .rem-times input:focus{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-dim); }
+  .rem-note{ font-size:0.66rem; color:var(--chalk-dim); line-height:1.5; }
+
   footer{ text-align:center; color:var(--steel-lt); font-size:0.7rem; padding:26px 14px 10px; letter-spacing:0.04em; }
 </style>
 </head>
@@ -402,6 +434,19 @@
 
     <button class="targets-toggle" id="nutTargetsToggle" type="button">Edit daily targets</button>
     <div class="targets-form" id="nutTargetsForm" hidden></div>
+
+    <div class="reminders" id="reminders">
+      <h3>Meal Reminders</h3>
+      <div class="rem-status" id="remStatus">Checking\u2026</div>
+      <div class="rem-times">
+        <div><label for="remT0">Breakfast</label><input type="time" id="remT0" value="08:00"></div>
+        <div><label for="remT1">Lunch</label><input type="time" id="remT1" value="12:30"></div>
+        <div><label for="remT2">Dinner</label><input type="time" id="remT2" value="18:30"></div>
+      </div>
+      <button class="btn-primary" id="remEnable" type="button" style="padding:13px">Turn On Reminders</button>
+      <button class="btn-ghost" id="remDisable" type="button" hidden>Turn Off</button>
+      <div class="rem-note" id="remNote"></div>
+    </div>
   </div>
 </main>
 
@@ -1453,6 +1498,167 @@
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* meal reminders (web push)                                           */
+  /* ------------------------------------------------------------------ */
+
+  var PUSH_PUBLIC_KEY = "BIaeBUon_uhg6-8qg013x6J9lp7XF-_bS-FRNQ4bgBYMJg8xjwDGcPQ5bfBNsZVt4YKK7Jr8VCgbUWsbR7Pa_ZY";
+  var PUSH_URL = "/api/push?person=" + PERSON;
+
+  function urlBase64ToUint8Array(base64String){
+    var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(base64);
+    var out = new Uint8Array(raw.length);
+    for(var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function pushSupported(){
+    return "serviceWorker" in navigator &&
+           "PushManager" in window &&
+           "Notification" in window;
+  }
+
+  // iOS only allows web push once the site is installed to the Home Screen.
+  function isIOS(){
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+           (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone(){
+    return window.navigator.standalone === true ||
+           (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+
+  function remEl(id){ return document.getElementById(id); }
+
+  function setRemStatus(msg, cls){
+    var el = remEl("remStatus");
+    if(!el) return;
+    el.textContent = msg;
+    el.className = "rem-status" + (cls ? " " + cls : "");
+  }
+
+  function readTimes(){
+    return [remEl("remT0").value, remEl("remT1").value, remEl("remT2").value];
+  }
+
+  function showRemNote(){
+    var note = remEl("remNote");
+    if(!note) return;
+    if(isIOS() && !isStandalone()){
+      note.textContent = "On iPhone, notifications only work once this app is added to your Home Screen. " +
+        "Tap Share, then Add to Home Screen, then open it from there and come back here.";
+    } else {
+      note.textContent = "Reminders fire at these times in your local timezone, even when the app is closed.";
+    }
+  }
+
+  function refreshReminderUI(){
+    if(!remEl("reminders")) return;
+    showRemNote();
+
+    if(!pushSupported()){
+      setRemStatus("This browser can't do notifications.", "bad");
+      remEl("remEnable").disabled = true;
+      return;
+    }
+    if(isIOS() && !isStandalone()){
+      setRemStatus("Add to Home Screen first \u2014 see below.", "bad");
+      remEl("remEnable").disabled = true;
+      return;
+    }
+
+    fetch(PUSH_URL, { cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(s){
+        if(!s) return;
+        if(s.enabled && s.hasSubscription){
+          setRemStatus("On \u2014 " + s.times.join(", ") + " (" + (s.timezone || "local") + ")", "good");
+          remEl("remEnable").textContent = "Update Times";
+          remEl("remDisable").removeAttribute("hidden");
+          for(var i = 0; i < 3; i++){
+            if(s.times[i]) remEl("remT" + i).value = s.times[i];
+          }
+        } else {
+          setRemStatus("Off. Pick your times and turn them on.");
+          remEl("remEnable").textContent = "Turn On Reminders";
+          remEl("remDisable").setAttribute("hidden", "");
+        }
+      })
+      .catch(function(){ setRemStatus("Couldn't reach the reminder service."); });
+  }
+
+  function saveReminders(subscription){
+    var tz = "UTC";
+    try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }catch(e){}
+    return fetch(PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: true, subscription: subscription, times: readTimes(), timezone: tz
+      })
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(b){ throw new Error(b.error || ("HTTP " + r.status)); });
+      return r.json();
+    });
+  }
+
+  function enableReminders(){
+    setRemStatus("Setting up\u2026");
+    var times = readTimes();
+    if(times.some(function(t){ return !t; })){
+      setRemStatus("Set all three times first.", "bad");
+      return;
+    }
+
+    navigator.serviceWorker.register("/sw.js")
+      .then(function(){ return navigator.serviceWorker.ready; })
+      .then(function(reg){
+        return Notification.requestPermission().then(function(perm){
+          if(perm !== "granted") throw new Error("Notifications were blocked. Allow them in your browser settings.");
+          return reg.pushManager.getSubscription().then(function(existing){
+            if(existing) return existing;
+            return reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(PUSH_PUBLIC_KEY)
+            });
+          });
+        });
+      })
+      .then(function(sub){ return saveReminders(sub.toJSON ? sub.toJSON() : sub); })
+      .then(function(){ toast("Reminders on"); refreshReminderUI(); })
+      .catch(function(err){
+        setRemStatus(err && err.message ? err.message : "Could not turn on reminders.", "bad");
+      });
+  }
+
+  function disableReminders(){
+    setRemStatus("Turning off\u2026");
+    fetch(PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false })
+    })
+      .then(function(){
+        if(!pushSupported()) return null;
+        return navigator.serviceWorker.ready
+          .then(function(reg){ return reg.pushManager.getSubscription(); })
+          .then(function(sub){ return sub ? sub.unsubscribe() : null; })
+          .catch(function(){ return null; });
+      })
+      .then(function(){ toast("Reminders off"); refreshReminderUI(); })
+      .catch(function(){ setRemStatus("Could not turn reminders off.", "bad"); });
+  }
+
+  function wireReminders(){
+    if(!remEl("reminders")) return;
+    remEl("remEnable").addEventListener("click", enableReminders);
+    remEl("remDisable").addEventListener("click", disableReminders);
+    refreshReminderUI();
+  }
+
   // Work worth protecting: a logged set, an archived session, or (Nick only) a
   // nutrition entry. A freshly seeded program counts as empty.
   function countWork(st){
@@ -1562,6 +1768,7 @@
   if(rolloverSessions() || programMigrated) save();
 
   wireNutrition();
+  wireReminders();
   renderTabs();
   render();
   restoreFromCloudIfEmpty();

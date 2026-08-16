@@ -1,2 +1,3 @@
 /api/sync  /.netlify/functions/sync  200
-/*         /index.html              200
+/api/push  /.netlify/functions/push  200
+/*         /index.html               200
