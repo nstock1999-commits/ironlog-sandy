@@ -230,6 +230,106 @@
     color:var(--chalk-dim); opacity:1; -webkit-text-fill-color:var(--chalk-dim);
   }
 
+  /* ---------- mode switch ---------- */
+  .mode-tabs{
+    display:flex; gap:6px; padding:12px 14px 0; max-width:640px; margin:0 auto;
+  }
+  .mode-tab{
+    flex:1; background:var(--surface-2); color:var(--chalk-dim);
+    border:1px solid var(--steel); border-radius:8px; padding:10px 12px;
+    font-size:0.82rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
+  }
+  .mode-tab.active{
+    background:linear-gradient(90deg, var(--blue), var(--accent));
+    color:#fff; border-color:transparent;
+  }
+
+  /* ---------- nutrition ---------- */
+  .date-nav{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--surface); border:1px solid var(--steel);
+    border-radius:var(--radius); padding:8px 10px; margin-bottom:16px;
+  }
+  .date-step{
+    background:var(--surface-2); color:var(--chalk); border:1px solid var(--steel);
+    border-radius:8px; padding:8px 16px; font-size:1rem; line-height:1;
+  }
+  .date-label{ text-align:center; flex:1; }
+  .date-label .d-main{ font-weight:700; font-size:0.95rem; letter-spacing:0.03em; }
+  .date-label .d-sub{ font-size:0.68rem; color:var(--chalk-dim); text-transform:uppercase; letter-spacing:0.06em; }
+
+  .macro-card{
+    background:var(--surface); border:1px solid var(--steel);
+    border-radius:var(--radius); padding:14px; margin-bottom:16px;
+  }
+  .macro-row{ margin-bottom:14px; }
+  .macro-row:last-child{ margin-bottom:0; }
+  .macro-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:5px; }
+  .macro-name{ font-size:0.72rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--chalk-dim); font-weight:600; }
+  .macro-val{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:0.85rem; font-variant-numeric:tabular-nums; }
+  .macro-val b{ font-size:1rem; color:var(--chalk); }
+  .macro-track{ height:8px; background:var(--surface-2); border-radius:999px; overflow:hidden; position:relative; }
+  .macro-fill{ height:100%; border-radius:999px; transition:width .25s ease; }
+  .macro-fill.under{ background:var(--steel-lt); }
+  .macro-fill.good{ background:#3f8f5a; }
+  .macro-fill.over{ background:var(--pr); }
+  .macro-zone{
+    position:absolute; top:0; bottom:0; border-left:1px dashed var(--chalk-dim);
+    opacity:.55; pointer-events:none;
+  }
+  .macro-note{ font-size:0.66rem; color:var(--chalk-dim); margin-top:4px; letter-spacing:0.02em; }
+
+  .nut-form{
+    background:var(--surface); border:1px solid var(--steel);
+    border-radius:var(--radius); padding:14px; margin-bottom:16px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .nut-form .row{ display:flex; gap:8px; }
+  .nut-form .row > *{ flex:1; min-width:0; }
+  .nut-form label{
+    display:block; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--chalk-dim); margin-bottom:4px; font-weight:600;
+  }
+  .nut-form select, .nut-form input[type=time]{
+    background:var(--surface-2); border:1px solid var(--steel); color:var(--chalk);
+    border-radius:8px; padding:11px 10px; font-size:0.95rem; width:100%;
+    font-family:inherit; outline:none;
+  }
+  .nut-form select:focus, .nut-form input:focus{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-dim); }
+  .cal-hint{ font-size:0.64rem; color:var(--chalk-dim); margin-top:4px; }
+
+  .meal-group{ margin-bottom:14px; }
+  .meal-title{
+    font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--accent); font-weight:700; margin-bottom:6px;
+  }
+  .entry{
+    background:var(--surface); border:1px solid var(--steel); border-radius:8px;
+    padding:10px 12px; margin-bottom:8px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .entry-main{ flex:1; min-width:0; }
+  .entry-food{ font-size:0.92rem; word-break:break-word; }
+  .entry-meta{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:0.72rem; color:var(--chalk-dim); margin-top:3px; font-variant-numeric:tabular-nums;
+  }
+  .entry-cal{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:0.95rem; font-weight:700; color:var(--blue); white-space:nowrap;
+  }
+  .entry-del{ background:transparent; border:none; color:var(--chalk-dim); font-size:1rem; padding:2px 4px; line-height:1; }
+  .entry-del:active{ color:var(--pr); }
+
+  .targets-toggle{
+    background:transparent; border:1px solid var(--steel); color:var(--chalk-dim);
+    border-radius:8px; padding:9px 12px; font-size:0.74rem; width:100%;
+    text-transform:uppercase; letter-spacing:0.05em;
+  }
+  .targets-form{
+    background:var(--surface); border:1px solid var(--steel); border-radius:var(--radius);
+    padding:14px; margin-top:10px; display:flex; flex-direction:column; gap:10px;
+  }
+
   footer{ text-align:center; color:var(--steel-lt); font-size:0.7rem; padding:26px 14px 10px; letter-spacing:0.04em; }
 </style>
 </head>
@@ -243,15 +343,66 @@
   </div>
 </header>
 
+<div class="mode-tabs" id="modeTabs">
+  <button class="mode-tab active" data-mode="lifting" type="button">Lifting</button>
+  <button class="mode-tab" data-mode="nutrition" type="button">Nutrition</button>
+</div>
+
 <div class="tabs-container" id="tabsContainer"></div>
 
 <main>
-  <div class="add-exercise">
-    <input type="text" id="newExerciseInput" placeholder="Exercise name (e.g. Squat)" autocomplete="off">
-    <button class="btn-primary" id="addExerciseBtn">Add</button>
-  </div>
+  <div id="liftingPanel">
+    <div class="add-exercise">
+      <input type="text" id="newExerciseInput" placeholder="Exercise name (e.g. Squat)" autocomplete="off">
+      <button class="btn-primary" id="addExerciseBtn">Add</button>
+    </div>
 
-  <div id="exerciseList"></div>
+    <div id="exerciseList"></div>
+  </div>
+  <div id="nutritionPanel" hidden>
+    <div class="date-nav">
+      <button class="date-step" id="nutPrev" type="button" aria-label="Previous day">&lsaquo;</button>
+      <div class="date-label"><div class="d-main" id="nutDateMain"></div><div class="d-sub" id="nutDateSub"></div></div>
+      <button class="date-step" id="nutNext" type="button" aria-label="Next day">&rsaquo;</button>
+    </div>
+
+    <div class="macro-card" id="nutSummary"></div>
+
+    <form class="nut-form" id="nutForm">
+      <div class="row">
+        <div>
+          <label for="nutMeal">Meal</label>
+          <select id="nutMeal">
+            <option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option>
+          </select>
+        </div>
+        <div>
+          <label for="nutTime">Time</label>
+          <input type="time" id="nutTime">
+        </div>
+      </div>
+      <div>
+        <label for="nutFood">Food</label>
+        <input type="text" id="nutFood" placeholder="e.g. 8 oz chicken thighs + rice" autocomplete="off">
+      </div>
+      <div class="row">
+        <div><label for="nutProtein">Protein (g)</label><input type="number" id="nutProtein" inputmode="decimal" min="0" step="1"></div>
+        <div><label for="nutCarbs">Carbs (g)</label><input type="number" id="nutCarbs" inputmode="decimal" min="0" step="1"></div>
+        <div><label for="nutFat">Fat (g)</label><input type="number" id="nutFat" inputmode="decimal" min="0" step="1"></div>
+      </div>
+      <div>
+        <label for="nutCalories">Calories</label>
+        <input type="number" id="nutCalories" inputmode="numeric" min="0" step="1">
+        <div class="cal-hint" id="nutCalHint">Auto from macros. Type here to override.</div>
+      </div>
+      <button class="btn-primary" id="nutAdd" type="submit" style="padding:13px">Add Entry</button>
+    </form>
+
+    <div id="nutEntries"></div>
+
+    <button class="targets-toggle" id="nutTargetsToggle" type="button">Edit daily targets</button>
+    <div class="targets-form" id="nutTargetsForm" hidden></div>
+  </div>
 </main>
 
 <footer>DAPRE progression. Saved on your device, backed up to the cloud. Log it. Lift it. Beat it next time.</footer>
@@ -266,6 +417,24 @@
   var STORAGE_KEY = "ironlog_data_sandy_v1";
   var SYNC_URL = "/api/sync?person=" + PERSON;
   var PARTNER = null;
+  var NUTRITION = true;
+
+  var MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"];
+
+  var DEFAULT_TARGETS = {
+    caloriesMin: 2300, caloriesMax: 2450,
+    proteinMin: 175,   proteinMax: 175,
+    carbsMin: 215,     carbsMax: 235,
+    fatMin: 65,        fatMax: 75
+  };
+
+  var TARGET_FIELDS = [
+    { key: "calories", label: "Calories" },
+    { key: "protein",  label: "Protein (g)" },
+    { key: "carbs",    label: "Carbs (g)" },
+    { key: "fat",      label: "Fat (g)" }
+  ];
+
   var MAX_HISTORY = 24;
 
   var SEED_DAYS = [
@@ -431,6 +600,7 @@
     data.exercises.forEach(normalizeExercise);
     if(!data.lastActiveDate) data.lastActiveDate = todayKey();
     reconcileProgram(data);
+    normalizeNutrition(data);
     return data;
   }
 
@@ -475,7 +645,8 @@
         });
       });
     });
-    return { exercises: exercises, lastActiveDate: todayKey(), programVersion: PROGRAM_VERSION };
+    return normalizeNutrition({ exercises: exercises, lastActiveDate: todayKey(),
+                                programVersion: PROGRAM_VERSION });
   }
 
   // Exercise names carry annotations ("Leg Press (superset -> next)",
@@ -990,6 +1161,298 @@
     el.classList.add("show");
     setTimeout(function(){ el.classList.remove("show"); }, 1600);
   }
+  /* ------------------------------------------------------------------ */
+  /* nutrition                                                           */
+  /* ------------------------------------------------------------------ */
+
+  function normalizeNutrition(data){
+    if(!data.nutrition || typeof data.nutrition !== "object") data.nutrition = {};
+    var n = data.nutrition;
+    if(!Array.isArray(n.entries)) n.entries = [];
+    if(!n.targets || typeof n.targets !== "object") n.targets = {};
+    Object.keys(DEFAULT_TARGETS).forEach(function(k){
+      if(typeof n.targets[k] !== "number" || !isFinite(n.targets[k])){
+        n.targets[k] = DEFAULT_TARGETS[k];
+      }
+    });
+    return data;
+  }
+
+  // Calories track the macros unless the entry carries an explicit override.
+  function entryCalories(e){
+    if(e.caloriesManual && typeof e.calories === "number") return e.calories;
+    return macroCalories(e.protein, e.carbs, e.fat);
+  }
+
+  function macroCalories(p, c, f){
+    return Math.round((num(p) * 4) + (num(c) * 4) + (num(f) * 9));
+  }
+
+  function num(v){
+    var n = typeof v === "number" ? v : parseFloat(v);
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  var nutDate = todayKey();
+  var calorieOverride = false;
+
+  function entriesFor(dateKey){
+    return state.nutrition.entries.filter(function(e){ return e.date === dateKey; });
+  }
+
+  function dayTotals(dateKey){
+    var t = { protein:0, carbs:0, fat:0, calories:0 };
+    entriesFor(dateKey).forEach(function(e){
+      t.protein  += num(e.protein);
+      t.carbs    += num(e.carbs);
+      t.fat      += num(e.fat);
+      t.calories += entryCalories(e);
+    });
+    return t;
+  }
+
+  function shiftDate(dateKey, days){
+    var p = dateKey.split("-");
+    var d = new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+    d.setDate(d.getDate() + days);
+    return dateKey_(d);
+  }
+
+  function dateKey_(d){
+    var m = d.getMonth()+1, day = d.getDate();
+    return d.getFullYear() + "-" + (m<10?"0":"") + m + "-" + (day<10?"0":"") + day;
+  }
+
+  function longDate(key){
+    var p = key.split("-");
+    var d = new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+    var days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var mons = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return days[d.getDay()] + ", " + mons[d.getMonth()] + " " + d.getDate();
+  }
+
+  function renderMacroRow(label, total, min, max, unit){
+    var pct = max > 0 ? Math.min(100, (total / max) * 100) : 0;
+    var cls = total > max ? "over" : (total >= min ? "good" : "under");
+    var range = (min === max) ? String(min) : (min + "\u2013" + max);
+    var note;
+    if(total > max) note = "Over by " + Math.round(total - max) + unit;
+    else if(total >= min) note = "In range";
+    else note = Math.round(min - total) + unit + " to go";
+    var zone = (max > 0 && min !== max) ? Math.min(100, (min / max) * 100) : -1;
+    return '<div class="macro-row">' +
+      '<div class="macro-head">' +
+        '<span class="macro-name">' + escapeHtml(label) + '</span>' +
+        '<span class="macro-val"><b>' + Math.round(total) + '</b> / ' + escapeHtml(range) + unit + '</span>' +
+      '</div>' +
+      '<div class="macro-track">' +
+        '<div class="macro-fill ' + cls + '" style="width:' + pct.toFixed(1) + '%"></div>' +
+        (zone >= 0 ? '<div class="macro-zone" style="left:' + zone.toFixed(1) + '%"></div>' : '') +
+      '</div>' +
+      '<div class="macro-note">' + escapeHtml(note) + '</div>' +
+    '</div>';
+  }
+
+  function renderNutrition(){
+    if(!NUTRITION) return;
+    var t = state.nutrition.targets;
+    var totals = dayTotals(nutDate);
+
+    document.getElementById("nutDateMain").textContent = longDate(nutDate);
+    document.getElementById("nutDateSub").textContent =
+      nutDate === todayKey() ? "Today" : nutDate;
+
+    document.getElementById("nutSummary").innerHTML =
+      renderMacroRow("Calories", totals.calories, t.caloriesMin, t.caloriesMax, "") +
+      renderMacroRow("Protein",  totals.protein,  t.proteinMin,  t.proteinMax,  "g") +
+      renderMacroRow("Carbs",    totals.carbs,    t.carbsMin,    t.carbsMax,    "g") +
+      renderMacroRow("Fat",      totals.fat,      t.fatMin,      t.fatMax,      "g");
+
+    var listEl2 = document.getElementById("nutEntries");
+    var rows = entriesFor(nutDate);
+    if(rows.length === 0){
+      listEl2.innerHTML = '<div class="empty"><strong>Nothing logged yet</strong>Add your first entry above.</div>';
+      return;
+    }
+
+    var html = "";
+    MEALS.forEach(function(meal){
+      var group = rows.filter(function(e){ return e.meal === meal; });
+      if(group.length === 0) return;
+      group.sort(function(a,b){ return String(a.time||"").localeCompare(String(b.time||"")); });
+      html += '<div class="meal-group"><div class="meal-title">' + escapeHtml(meal) + '</div>';
+      group.forEach(function(e){
+        html += '<div class="entry">' +
+          '<div class="entry-main">' +
+            '<div class="entry-food">' + escapeHtml(e.food || "\u2014") + '</div>' +
+            '<div class="entry-meta">' +
+              (e.time ? escapeHtml(e.time) + " \u00b7 " : "") +
+              "P " + Math.round(num(e.protein)) + "g \u00b7 " +
+              "C " + Math.round(num(e.carbs)) + "g \u00b7 " +
+              "F " + Math.round(num(e.fat)) + "g" +
+              (e.caloriesManual ? " \u00b7 manual kcal" : "") +
+            '</div>' +
+          '</div>' +
+          '<div class="entry-cal">' + entryCalories(e) + '</div>' +
+          '<button class="entry-del" data-nut-del="' + escapeHtml(e.id) + '" aria-label="Delete entry">\u2715</button>' +
+        '</div>';
+      });
+      html += '</div>';
+    });
+    listEl2.innerHTML = html;
+  }
+
+  function renderTargetsForm(){
+    var t = state.nutrition.targets;
+    document.getElementById("nutTargetsForm").innerHTML =
+      TARGET_FIELDS.map(function(f){
+        return '<div class="row">' +
+          '<div><label for="tgt-' + f.key + '-min">' + escapeHtml(f.label) + ' min</label>' +
+            '<input type="number" class="cell-input" style="max-width:none" id="tgt-' + f.key + '-min" ' +
+            'inputmode="numeric" min="0" step="1" value="' + t[f.key + "Min"] + '"></div>' +
+          '<div><label for="tgt-' + f.key + '-max">' + escapeHtml(f.label) + ' max</label>' +
+            '<input type="number" class="cell-input" style="max-width:none" id="tgt-' + f.key + '-max" ' +
+            'inputmode="numeric" min="0" step="1" value="' + t[f.key + "Max"] + '"></div>' +
+        '</div>';
+      }).join("") +
+      '<button class="btn-primary" id="nutTargetsSave" type="button" style="padding:12px">Save Targets</button>';
+
+    document.getElementById("nutTargetsSave").addEventListener("click", function(){
+      TARGET_FIELDS.forEach(function(f){
+        ["Min","Max"].forEach(function(side){
+          var el = document.getElementById("tgt-" + f.key + "-" + side.toLowerCase());
+          var v = parseFloat(el.value);
+          if(isFinite(v) && v >= 0) state.nutrition.targets[f.key + side] = v;
+        });
+        // A max below the min is almost certainly a typo -- clamp rather than
+        // render an impossible range.
+        var mn = state.nutrition.targets[f.key + "Min"];
+        var mx = state.nutrition.targets[f.key + "Max"];
+        if(mx < mn) state.nutrition.targets[f.key + "Max"] = mn;
+      });
+      save();
+      renderTargetsForm();
+      renderNutrition();
+      toast("Targets saved");
+    });
+  }
+
+  function syncCalorieField(){
+    if(calorieOverride) return;
+    var p = document.getElementById("nutProtein").value;
+    var c = document.getElementById("nutCarbs").value;
+    var f = document.getElementById("nutFat").value;
+    var kcal = macroCalories(p, c, f);
+    document.getElementById("nutCalories").value = kcal > 0 ? kcal : "";
+  }
+
+  function wireNutrition(){
+    if(!NUTRITION) return;
+
+    document.getElementById("nutPrev").addEventListener("click", function(){
+      nutDate = shiftDate(nutDate, -1); renderNutrition();
+    });
+    document.getElementById("nutNext").addEventListener("click", function(){
+      nutDate = shiftDate(nutDate, 1); renderNutrition();
+    });
+
+    ["nutProtein","nutCarbs","nutFat"].forEach(function(id){
+      document.getElementById(id).addEventListener("input", syncCalorieField);
+    });
+    document.getElementById("nutCalories").addEventListener("input", function(){
+      calorieOverride = this.value !== "";
+      document.getElementById("nutCalHint").textContent = calorieOverride
+        ? "Manual override. Clear the field to go back to auto."
+        : "Auto from macros. Type here to override.";
+    });
+
+    document.getElementById("nutForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      var food = document.getElementById("nutFood").value.trim();
+      var p = document.getElementById("nutProtein").value;
+      var c = document.getElementById("nutCarbs").value;
+      var f = document.getElementById("nutFat").value;
+      var calRaw = document.getElementById("nutCalories").value;
+
+      if(!food && !num(p) && !num(c) && !num(f) && !num(calRaw)){
+        toast("Add a food or some macros first");
+        return;
+      }
+
+      var manual = calorieOverride && num(calRaw) > 0;
+      state.nutrition.entries.push({
+        id: uid(),
+        date: nutDate,
+        meal: document.getElementById("nutMeal").value,
+        time: document.getElementById("nutTime").value || "",
+        food: food,
+        protein: num(p),
+        carbs: num(c),
+        fat: num(f),
+        calories: manual ? Math.round(num(calRaw)) : macroCalories(p, c, f),
+        caloriesManual: manual
+      });
+
+      save();
+      document.getElementById("nutFood").value = "";
+      ["nutProtein","nutCarbs","nutFat","nutCalories"].forEach(function(id){
+        document.getElementById(id).value = "";
+      });
+      calorieOverride = false;
+      document.getElementById("nutCalHint").textContent = "Auto from macros. Type here to override.";
+      renderNutrition();
+      toast("Logged");
+    });
+
+    document.getElementById("nutEntries").addEventListener("click", function(e){
+      var btn = e.target.closest("[data-nut-del]");
+      if(!btn) return;
+      var id = btn.getAttribute("data-nut-del");
+      state.nutrition.entries = state.nutrition.entries.filter(function(x){ return x.id !== id; });
+      save();
+      renderNutrition();
+    });
+
+    var toggle = document.getElementById("nutTargetsToggle");
+    toggle.addEventListener("click", function(){
+      var form = document.getElementById("nutTargetsForm");
+      var open = form.hasAttribute("hidden");
+      if(open){ form.removeAttribute("hidden"); renderTargetsForm(); toggle.textContent = "Hide daily targets"; }
+      else { form.setAttribute("hidden",""); toggle.textContent = "Edit daily targets"; }
+    });
+
+    document.getElementById("modeTabs").addEventListener("click", function(e){
+      var btn = e.target.closest("[data-mode]");
+      if(!btn) return;
+      setMode(btn.getAttribute("data-mode"));
+    });
+  }
+
+  var mode = "lifting";
+
+  function setMode(next){
+    mode = next;
+    var tabs = document.querySelectorAll("#modeTabs .mode-tab");
+    for(var i=0;i<tabs.length;i++){
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-mode") === mode);
+    }
+    var lifting = document.getElementById("liftingPanel");
+    var nut = document.getElementById("nutritionPanel");
+    var tabsC = document.getElementById("tabsContainer");
+    if(mode === "nutrition"){
+      lifting.setAttribute("hidden","");
+      nut.removeAttribute("hidden");
+      tabsC.style.display = "none";
+      nutDate = todayKey();
+      renderNutrition();
+    } else {
+      nut.setAttribute("hidden","");
+      lifting.removeAttribute("hidden");
+      tabsC.style.display = "";
+      render();
+    }
+  }
+
   // Work worth protecting: a logged set, an archived session, or (Nick only) a
   // nutrition entry. A freshly seeded program counts as empty.
   function countWork(st){
@@ -1098,6 +1561,7 @@
   // program migration so it survives the session and reaches the cloud backup.
   if(rolloverSessions() || programMigrated) save();
 
+  wireNutrition();
   renderTabs();
   render();
   restoreFromCloudIfEmpty();
